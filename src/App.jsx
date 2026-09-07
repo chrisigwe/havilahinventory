@@ -4,6 +4,7 @@ import { loadBootstrap } from './lib/data'
 import Login from './pages/Login'
 import SalesEntry from './pages/SalesEntry'
 import Stock from './pages/Stock'
+import Store from './pages/Store'
 import Shell from './components/Shell'
 
 export default function App() {
@@ -41,8 +42,8 @@ export default function App() {
 
   return (
     <Shell staff={boot.staff} tab={tab} onTab={setTab}>
-      {tab === 'sales'
-        ? <SalesEntry boot={boot} />
+      {tab === 'sales' ? <SalesEntry boot={boot} />
+        : tab === 'store' ? <Store boot={boot} />
         : <Stock boot={boot} />}
     </Shell>
   )

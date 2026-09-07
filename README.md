@@ -31,3 +31,15 @@ variables → deploy. `netlify.toml` handles the SPA redirect.
   the app never computes stock, it only reads `v_stock_on_hand`.
 - Stock tab: on-hand by location, negatives in red (they mean a count
   or a missed entry is needed).
+- Store tab (storekeeper / manager / gm / admin only): Receive records
+  deliveries into the store with unit cost; Disburse moves stock from
+  the store to a department. Several items are staged and saved in one
+  go, and Disburse warns when a line exceeds what the store holds.
+
+## Who can do what
+
+Location is never locked: `default_location_id` only preselects a
+staff member's usual bar, and anyone can switch. Awka's OpenBar staff
+ring up Lounge-priced sales via the tier chips on the same screen.
+Recording is open to all active staff for their own branch; editing
+and deleting history stay manager-only (enforced by RLS, not the UI).
