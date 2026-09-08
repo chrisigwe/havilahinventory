@@ -45,9 +45,10 @@ variables → deploy. `netlify.toml` handles the SPA redirect.
   who did it and when. That log is written by database triggers
   (15_audit_log.sql), so corrections made outside the app are recorded
   too. It is append-only: nobody can edit or delete the log itself.
-- History tab (storekeeper): the same change history, read only, scoped
-  to their own branch. No Entries list, no edit or delete buttons —
-  enforced by RLS (17_audit_for_storekeepers.sql), not just hidden.
+  Storekeepers have the same Fix tab as managers (18_storekeeper_full_rights.sql),
+  but scoped to their own branch: they can edit and delete their branch's
+  entries and manage its catalog, while manager/gm/admin additionally see
+  and edit both branches.
 
 ## Who sees what
 

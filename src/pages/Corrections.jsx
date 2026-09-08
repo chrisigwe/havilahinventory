@@ -4,7 +4,7 @@ import { loadActivity, deleteEntry, updateEntry, loadAudit } from '../lib/data'
 
 export default function Corrections({ boot }) {
   const { staff, allLocations, items } = boot
-  const canEdit = ['manager', 'gm', 'admin'].includes(staff.role)
+  const canEdit = ['storekeeper', 'manager', 'gm', 'admin'].includes(staff.role)
   const [rows, setRows] = useState(null)
   const [view, setView] = useState(canEdit ? 'entries' : 'history')
   const [audit, setAudit] = useState(null)

@@ -2,15 +2,13 @@ import { supabase } from '../lib/supabase'
 import Logo from './Logo'
 
 const STOCK_ROLES = ['storekeeper', 'manager', 'gm', 'admin']
-const FIX_ROLES = ['manager', 'gm', 'admin']
-const AUDIT_ROLES = ['storekeeper', 'manager', 'gm', 'admin']
+const FIX_ROLES = ['storekeeper', 'manager', 'gm', 'admin']
 
 export default function Shell({ staff, tab, onTab, children }) {
   const tabs = [['sales', 'Sales']]
   if (STOCK_ROLES.includes(staff.role)) tabs.push(['store', 'Store'])
   tabs.push(['stock', 'Stock'])
   if (FIX_ROLES.includes(staff.role)) tabs.push(['fix', 'Fix'])
-  else if (AUDIT_ROLES.includes(staff.role)) tabs.push(['fix', 'History'])
   return (
     <div className="min-h-dvh pb-24">
       <header className="px-5 pt-5 pb-3 flex items-baseline justify-between">
