@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import Logo from './Logo'
 
 const STOCK_ROLES = ['storekeeper', 'manager', 'gm', 'admin']
 const FIX_ROLES = ['manager', 'gm', 'admin']
@@ -11,7 +12,8 @@ export default function Shell({ staff, tab, onTab, children }) {
   return (
     <div className="min-h-dvh pb-24">
       <header className="px-5 pt-5 pb-3 flex items-baseline justify-between">
-        <div>
+        <div className="flex items-center gap-2">
+          <Logo className="w-5 h-5 text-amber" />
           <span className="font-bold text-lg">Havilah</span>
           <span className="text-dim text-lg"> · {staff.full_name.split(' ')[0]}</span>
         </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import Logo from '../components/Logo'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -16,9 +17,12 @@ export default function Login() {
 
   return (
     <div className="min-h-dvh flex flex-col justify-center px-6 max-w-sm mx-auto">
-      <h1 className="text-[2.6rem] leading-none font-bold tracking-tight">
-        Havilah<span className="text-amber"> Inventory</span>
-      </h1>
+      <div className="flex items-center gap-4">
+        <Logo className="w-14 h-14 shrink-0 text-amber" />
+        <h1 className="text-[2.3rem] leading-none font-bold tracking-tight">
+          Havilah<span className="text-amber"> Inventory</span>
+        </h1>
+      </div>
       <p className="mt-2 text-dim">Sign in to record sales and stock.</p>
       <div className="mt-10 space-y-4">
         <input value={email} onChange={e => setEmail(e.target.value)} type="email" inputMode="email"
