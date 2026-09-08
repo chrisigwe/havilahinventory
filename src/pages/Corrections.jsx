@@ -4,8 +4,9 @@ import { loadActivity, deleteEntry, updateEntry, loadAudit } from '../lib/data'
 
 export default function Corrections({ boot }) {
   const { staff, allLocations, items } = boot
+  const canEdit = ['manager', 'gm', 'admin'].includes(staff.role)
   const [rows, setRows] = useState(null)
-  const [view, setView] = useState('entries')     // entries | history
+  const [view, setView] = useState(canEdit ? 'entries' : 'history')
   const [audit, setAudit] = useState(null)
   const [edit, setEdit] = useState(null)
   const [confirm, setConfirm] = useState(null)
@@ -16,9 +17,9 @@ export default function Corrections({ boot }) {
   const locById  = useMemo(() => Object.fromEntries(allLocations.map(l => [l.id, l])), [allLocations])
 
   const refresh = useCallback(() => {
-    loadActivity(staff.branch_id).then(setRows).catch(e => alert(e.message))
+    if (canEdit) loadActivity(staff.branch_id).then(setRows).catch(e => alert(e.message))
     loadAudit(staff.branch_id).then(setAudit).catch(() => setAudit([]))
-  }, [staff.branch_id])
+  }, [staff.branch_id, canEdit])
   useEffect(refresh, [refresh])
 
   function describe(r) {
@@ -59,11 +60,11 @@ export default function Corrections({ boot }) {
     setBusy(false)
   }
 
-  if (!rows) return <p className="px-5 text-dim">Loading…</p>
+  if (canEdit && !rows) return <p className="px-5 text-dim">Loading…</p>
 
   return (
     <div className="px-5">
-      <div className="flex gap-2 py-2">
+      {canEdit && <div className="flex gap-2 py-2">
         {[['entries', 'Entries'], ['history', 'Change history']].map(([k, label]) => (
           <button key={k} onClick={() => setView(k)}
             className={`flex-1 h-12 rounded-xl border font-bold ${view === k
@@ -71,7 +72,13 @@ export default function Corrections({ boot }) {
             {label}
           </button>
         ))}
-      </div>
+      </div>}
+
+      {!canEdit && (
+        <p className="text-dim text-sm py-2">
+          Every edit and deletion at this branch, newest first.
+        </p>
+      )}
 
       {view === 'history' ? (
         <ul className="divide-y divide-line/60">
