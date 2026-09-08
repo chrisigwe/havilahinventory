@@ -36,6 +36,16 @@ variables → deploy. `netlify.toml` handles the SPA redirect.
   the store to a department. Several items are staged and saved in one
   go, and Disburse warns when a line exceeds what the store holds.
 
+- Fix tab (manager / gm / admin only): last 14 days of sales and stock
+  movements, each editable (quantity, price/cost) or deletable. Deleting
+  a sale reverses its stock deduction automatically; editing one restates
+  its payment record to the new total. Sale deductions are hidden from
+  the list — correct the sale itself and the movement follows.
+  A second view, Change history, shows every deletion and edit with
+  who did it and when. That log is written by database triggers
+  (15_audit_log.sql), so corrections made outside the app are recorded
+  too. It is append-only: nobody can edit or delete the log itself.
+
 ## Who sees what
 
 `staff_locations` assigns each person their departments (14_staff_locations.sql).

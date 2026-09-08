@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import SalesEntry from './pages/SalesEntry'
 import Stock from './pages/Stock'
 import Store from './pages/Store'
+import Corrections from './pages/Corrections'
 import Shell from './components/Shell'
 
 export default function App() {
@@ -44,6 +45,7 @@ export default function App() {
     <Shell staff={boot.staff} tab={tab} onTab={setTab}>
       {tab === 'sales' ? <SalesEntry boot={boot} />
         : tab === 'store' ? <Store boot={boot} />
+        : tab === 'fix' ? <Corrections boot={boot} />
         : <Stock boot={boot} />}
     </Shell>
   )

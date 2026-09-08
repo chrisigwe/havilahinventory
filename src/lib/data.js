@@ -110,3 +110,72 @@ export async function saveWriteoff({ staff, item, locationId, kind, qty, unitVal
   })
   if (error) throw error
 }
+
+// ---------- corrections (manager / gm / admin only) ----------
+
+// Recent activity across sales and stock movements, newest first.
+export async function loadActivity(branchId, days = 14) {
+  const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10)
+  const [sales, moves] = await Promise.all([
+    supabase.from('sales')
+      .select('id, business_date, stock_item_id, location_id, tier, qty, unit_price, amount, recorded_by, created_at')
+      .eq('branch_id', branchId).gte('business_date', since)
+      .order('created_at', { ascending: false }).limit(300),
+    supabase.from('stock_movements')
+      .select('id, business_date, stock_item_id, movement_type, from_location, to_location, qty, unit_cost, note, recorded_by, created_at')
+      .eq('branch_id', branchId).gte('business_date', since)
+      .is('reference_id', null)          // sale deductions are shown as their sale
+      .order('created_at', { ascending: false }).limit(300),
+  ])
+  if (sales.error) throw sales.error
+  if (moves.error) throw moves.error
+  return [
+    ...sales.data.map(r => ({ ...r, kind: 'sale' })),
+    ...moves.data.map(r => ({ ...r, kind: 'movement' })),
+  ].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+}
+
+export async function deleteEntry(entry) {
+  if (entry.kind === 'sale') {
+    const { error: e1 } = await supabase.from('sale_payments').delete().eq('sale_id', entry.id)
+    if (e1) throw e1
+    const { error } = await supabase.from('sales').delete().eq('id', entry.id)
+    if (error) throw error          // trigger removes the stock deduction
+  } else {
+    const { error } = await supabase.from('stock_movements').delete().eq('id', entry.id)
+    if (error) throw error
+  }
+}
+
+export async function updateEntry(entry, { qty, unitPrice }) {
+  if (entry.kind === 'sale') {
+    const { error } = await supabase.from('sales')
+      .update({ qty, unit_price: unitPrice }).eq('id', entry.id)
+    if (error) throw error          // trigger keeps the deduction in step
+    // payments no longer match the new total: restate as a single row
+    const { error: e1 } = await supabase.from('sale_payments').delete().eq('sale_id', entry.id)
+    if (e1) throw e1
+    const { data: pm } = await supabase.from('branch_payment_methods')
+      .select('method').eq('branch_id', entry.branch_id ?? undefined).limit(1)
+    const method = entry.method || pm?.[0]?.method || 'cash'
+    const { error: e2 } = await supabase.from('sale_payments')
+      .insert({ sale_id: entry.id, method, amount: qty * unitPrice })
+    if (e2) throw e2
+  } else {
+    const patch = { qty }
+    if (unitPrice !== undefined && unitPrice !== null && unitPrice !== '') patch.unit_cost = unitPrice
+    const { error } = await supabase.from('stock_movements').update(patch).eq('id', entry.id)
+    if (error) throw error
+  }
+}
+
+export async function loadAudit(branchId, limit = 100) {
+  const { data, error } = await supabase
+    .from('inventory_audit')
+    .select('id, happened_at, action, entity, summary, done_by_name, business_date')
+    .eq('branch_id', branchId)
+    .order('happened_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data
+}
