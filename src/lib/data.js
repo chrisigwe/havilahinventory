@@ -12,16 +12,30 @@ export async function loadBootstrap() {
   if (e1) throw e1
   if (!staff) return { staff: null }
   const b = staff.branch_id
-  const [locs, tiers, methods, items] = await Promise.all([
+  const [locs, tiers, methods, items, assigned] = await Promise.all([
     supabase.from('stock_locations').select('*').eq('branch_id', b).order('sort_order'),
     supabase.from('branch_price_tiers').select('tier').eq('branch_id', b),
     supabase.from('branch_payment_methods').select('method').eq('branch_id', b),
     supabase.from('stock_items').select('*').eq('branch_id', b).eq('is_active', true).order('name'),
+    supabase.from('staff_locations').select('location_id').eq('staff_id', staff.id),
   ])
   for (const r of [locs, tiers, methods, items]) if (r.error) throw r.error
+
+  // Departments this person works. Storekeepers and managers see all;
+  // so does anyone with no assignment yet. The store itself is only
+  // shown to roles that handle it.
+  const OVERSEER = ['storekeeper', 'manager', 'gm', 'admin']
+  const mine = new Set((assigned?.data || []).map(r => r.location_id))
+  const seesAll = OVERSEER.includes(staff.role) || mine.size === 0
+  const visible = seesAll
+    ? locs.data
+    : locs.data.filter(l => mine.has(l.id))
+
   return {
     staff,
-    locations: locs.data,
+    seesAll,
+    allLocations: locs.data,
+    locations: visible,
     tiers: tiers.data.map(t => t.tier),
     methods: methods.data.map(m => m.method),
     items: items.data,

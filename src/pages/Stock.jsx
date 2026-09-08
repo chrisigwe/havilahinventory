@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { loadStockMap } from '../lib/data'
 
 export default function Stock({ boot }) {
-  const { staff, locations, items } = boot
+  const { staff, locations, items, seesAll } = boot
   const [stockMap, setStockMap] = useState({})
   const [locId, setLocId] = useState('all')
   const [q, setQ] = useState('')
@@ -30,7 +30,9 @@ export default function Stock({ boot }) {
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search stock"
         className="w-full h-13 px-4 rounded-xl bg-surface border border-line placeholder:text-dim" />
       <div className="flex gap-2 overflow-x-auto py-3 -mx-1 px-1">
-        <LocChip active={locId === 'all'} onClick={() => setLocId('all')}>Everywhere</LocChip>
+        <LocChip active={locId === 'all'} onClick={() => setLocId('all')}>
+          {seesAll ? 'Everywhere' : 'My areas'}
+        </LocChip>
         {locations.map(l => (
           <LocChip key={l.id} active={locId === l.id} onClick={() => setLocId(l.id)}>{l.name}</LocChip>
         ))}

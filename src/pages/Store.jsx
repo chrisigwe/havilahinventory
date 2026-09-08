@@ -5,7 +5,8 @@ import { supabase } from '../lib/supabase'
 import ItemPicker from '../components/ItemPicker'
 
 export default function Store({ boot }) {
-  const { staff, locations, items } = boot
+  const { staff, allLocations, items } = boot
+  const locations = allLocations
   const store = locations.find(l => l.is_store)
   const departments = locations.filter(l => !l.is_store)
   const date = lagosToday()

@@ -36,6 +36,17 @@ variables → deploy. `netlify.toml` handles the SPA redirect.
   the store to a department. Several items are staged and saved in one
   go, and Disburse warns when a line exceeds what the store holds.
 
+## Who sees what
+
+`staff_locations` assigns each person their departments (14_staff_locations.sql).
+Barmen see only their own areas on both the Sales and Stock tabs.
+Storekeepers, managers, GM and admin see every location — as does
+anyone with no assignment yet, so nobody is locked out by omission.
+
+At Nnewi, OpenBar staff are assigned OpenBar *and* Lounge, since
+Lounge is a location there. At Awka, Lounge is a price tier, so
+OpenBar staff reach it through the tier chips instead.
+
 ## Who can do what
 
 Location is never locked: `default_location_id` only preselects a
