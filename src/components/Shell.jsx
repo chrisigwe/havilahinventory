@@ -6,7 +6,8 @@ const STOCK_ROLES = ['storekeeper', 'manager', 'gm', 'admin']
 
 const MORE = ['credit', 'count', 'catalog', 'variance', 'fix']
 
-export default function Shell({ staff, tab, onTab, children }) {
+export default function Shell({ staff, tab, onTab, children,
+                                branches = [], viewBranch, onBranch }) {
   const auditorOnly = staff.role === 'auditor'
   const tabs = auditorOnly ? [] : [['sales', 'Sales']]
   if (STOCK_ROLES.includes(staff.role)) tabs.push(['store', 'Store'])
@@ -20,7 +21,17 @@ export default function Shell({ staff, tab, onTab, children }) {
           <span className="font-bold text-lg shrink-0">Havilah</span>
           <span className="text-dim text-sm truncate">· {staff.full_name}</span>
         </div>
-        <button onClick={() => supabase.auth.signOut()} className="text-dim text-sm shrink-0">Sign out</button>
+        <div className="flex items-center gap-3 shrink-0">
+          {branches.length > 1 && (
+            <select value={viewBranch || ''} onChange={e => onBranch(e.target.value)}
+              className="h-9 px-2 rounded-lg bg-surface border border-line text-sm">
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.slug.toUpperCase()}</option>
+              ))}
+            </select>
+          )}
+          <button onClick={() => supabase.auth.signOut()} className="text-dim text-sm">Sign out</button>
+        </div>
       </header>
       <PendingBanner />
       {children}

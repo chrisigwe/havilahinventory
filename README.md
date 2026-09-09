@@ -49,7 +49,12 @@ variables → deploy. `netlify.toml` handles the SPA redirect.
 
 ## Branch scope
 
-Only GM and admin see both branches (21_branch_scope.sql). Managers,
+Only GM and admin see both branches (21_branch_scope.sql). They get a
+branch selector in the header; switching reloads the whole app against
+that branch, so every screen — sales, stock, credit, counts, corrections
+— shows the selected branch. They can also record in either branch
+(26_admin_cross_branch_write.sql). Everyone else has no selector and is
+pinned to their own branch by RLS regardless of what the client asks for. Managers,
 store managers, auditors and bar staff are confined to their own branch —
 they keep every capability their role carries, but only within it.
 Someone who works both branches needs one account per branch.

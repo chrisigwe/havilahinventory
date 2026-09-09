@@ -11,7 +11,7 @@ import Variances from './pages/Variances'
 import More from './pages/More'
 import { ToastHost } from './components/Toast'
 import { registerHandlers, flush } from './lib/outbox'
-import { saveBasket, saveWriteoff, saveMovements } from './lib/data'
+import { saveBasket, saveWriteoff, saveMovements, loadBranches } from './lib/data'
 import Credit from './pages/Credit'
 import Counts from './pages/Counts'
 import Shell from './components/Shell'
@@ -21,6 +21,8 @@ export default function App() {
   const [boot, setBoot] = useState(null)
   const [tab, setTab] = useState('sales')
   const [err, setErr] = useState(null)
+  const [branches, setBranches] = useState([])
+  const [viewBranch, setViewBranch] = useState(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -30,8 +32,11 @@ export default function App() {
 
   const refresh = useCallback(() => {
     if (!session) { setBoot(null); return }
-    loadBootstrap().then(setBoot).catch(e => setErr(e.message))
-  }, [session])
+    loadBootstrap(viewBranch).then(b => {
+      setBoot(b)
+      if (b?.seesAllBranches && !branches.length) loadBranches().then(setBranches)
+    }).catch(e => setErr(e.message))
+  }, [session, viewBranch])
 
   useEffect(refresh, [refresh])
 
@@ -67,7 +72,9 @@ export default function App() {
 
   return (
     <ToastHost>
-    <Shell staff={boot.staff} tab={tab} onTab={setTab}>
+    <Shell staff={boot.staff} tab={tab} onTab={setTab}
+      branches={boot.seesAllBranches ? branches : []}
+      viewBranch={boot.viewBranchId} onBranch={setViewBranch}>
       {tab === 'sales' ? <SalesEntry boot={boot} />
         : tab === 'store' ? <Store boot={boot} />
         : tab === 'more' ? <More boot={boot} onGo={setTab} />

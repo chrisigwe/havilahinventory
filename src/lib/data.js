@@ -1,6 +1,15 @@
 import { supabase } from './supabase'
 
-export async function loadBootstrap() {
+export async function loadBranches() {
+  const { data, error } = await supabase.from('branches')
+    .select('id, slug, name').eq('is_active', true).order('slug')
+  if (error) return []
+  return data
+}
+
+// viewBranchId lets GM/admin work in either branch; everyone else
+// is pinned to their own by RLS regardless of what is passed.
+export async function loadBootstrap(viewBranchId) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
   // accept both identity mappings: explicit auth_user_id link,
@@ -11,7 +20,8 @@ export async function loadBootstrap() {
     .eq('is_active', true).limit(1).maybeSingle()
   if (e1) throw e1
   if (!staff) return { staff: null }
-  const b = staff.branch_id
+  const seesAllBranches = ['gm', 'admin'].includes(staff.role)
+  const b = (seesAllBranches && viewBranchId) ? viewBranchId : staff.branch_id
   const [locs, tiers, methods, items, assigned] = await Promise.all([
     supabase.from('stock_locations').select('*').eq('branch_id', b).order('sort_order'),
     supabase.from('branch_price_tiers').select('tier').eq('branch_id', b),
@@ -32,7 +42,11 @@ export async function loadBootstrap() {
     : locs.data.filter(l => mine.has(l.id))
 
   return {
-    staff,
+    // pages read staff.branch_id everywhere, so point it at the branch
+    // being viewed; realBranchId keeps the person's home branch
+    staff: { ...staff, branch_id: b, realBranchId: staff.branch_id },
+    seesAllBranches,
+    viewBranchId: b,
     seesAll,
     allLocations: locs.data,
     locations: visible,
