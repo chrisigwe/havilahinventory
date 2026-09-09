@@ -149,3 +149,21 @@ More > Variances lists any sale where POS + Cash + Credit does not equal
 quantity x unit price, with operator and amount (`v_sale_variances`).
 Bar staff cannot save an unbalanced sale at all; managers can override
 with a confirmation, and the override lands here.
+
+
+## One customer, one record
+
+Customer names are normalised in the database (`normalize_customer_name`):
+titles, bracketed asides, "c/o ..." attributions and punctuation are
+stripped, so "Mr Chike", "Mr. Chike", "Mr Chike c/o Kelvin" and
+"Mr Chike (Caleb)" all reduce to the key `chike`. A unique index on
+(branch_id, name_key) means a second record cannot be created for the
+same person, and the app reuses the existing one if a barman types a
+different spelling.
+
+Who served the customer goes in `served_by`, not in the name.
+`v_customer_similar` lists near-matches the key cannot catch (a surname
+added later, a typo); `merge_customers(keep, merge[])` folds them
+together, moving sales and repayments to the surviving record.
+
+Catalog editing is GM and admin only, enforced by RLS.

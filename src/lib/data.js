@@ -280,17 +280,37 @@ export async function loadDailySummary(branchId, date) {
 // ---------- customers & credit ----------
 export async function loadCustomers(branchId) {
   const { data, error } = await supabase.from('customers')
-    .select('id, name, phone').eq('branch_id', branchId).eq('is_active', true).order('name')
+    .select('id, name, phone, served_by').eq('branch_id', branchId)
+    .eq('is_active', true).order('name')
   if (error) throw error
   return data
 }
 
-export async function createCustomer(branchId, name, phone) {
+export async function createCustomer(branchId, name, servedBy) {
   const { data, error } = await supabase.from('customers')
-    .insert({ branch_id: branchId, name: name.trim(), phone: phone || null })
-    .select('id, name, phone').single()
-  if (error) throw error
+    .insert({ branch_id: branchId, name: name.trim(), served_by: servedBy || null })
+    .select('id, name, served_by').single()
+  if (error) {
+    // the unique index caught a duplicate spelling — reuse the record
+    // that already exists instead of failing the sale
+    if (String(error.code) === '23505') {
+      const { data: found } = await supabase.from('customers')
+        .select('id, name, served_by').eq('branch_id', branchId)
+        .eq('name_key', normalizeName(name)).maybeSingle()
+      if (found) return found
+    }
+    throw error
+  }
   return data
+}
+
+function normalizeName(s) {
+  return (s || '').toLowerCase()
+    .replace(/\(.*?\)/g, ' ')
+    .replace(/\b(c\/o|c\.o\.|care of)\b.*$/, ' ')
+    .replace(/\b(mr|mrs|miss|ms|dr|chief|engr|engineer|alhaji|alhaja|pastor|rev|prof|sir|madam|mallam|barr)\b\.?/g, ' ')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ').trim()
 }
 
 export async function loadBalances(branchId) {

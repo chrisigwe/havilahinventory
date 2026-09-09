@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { naira, lagosToday, tierLabel, methodLabel } from '../lib/format'
 import { loadStockMap, loadPopular, loadToday, saveBasket, saveWriteoff,
          loadDailySummary, loadCustomers, createCustomer,
-         loadReconciliation, loadOpeningDate } from '../lib/data'
+         loadReconciliation, loadOpeningDate, loadBalances } from '../lib/data'
 import { enqueue, flush, isConnectionError } from '../lib/outbox'
 import { useToast } from '../components/Toast'
 import ItemPicker from '../components/ItemPicker'
+import CustomerPicker from '../components/CustomerPicker'
 
 export default function SalesEntry({ boot }) {
   const { staff, locations, tiers, methods, items } = boot
@@ -41,7 +42,12 @@ export default function SalesEntry({ boot }) {
     loadDailySummary(staff.branch_id, date).then(setSummary).catch(() => {})
     loadReconciliation(staff.branch_id, date, locationId).then(setRecon).catch(() => {})
     loadOpeningDate(staff.branch_id).then(setOpeningDate).catch(() => {})
-    loadCustomers(staff.branch_id).then(setCustomers).catch(() => setCustomers([]))
+    Promise.all([loadCustomers(staff.branch_id), loadBalances(staff.branch_id).catch(() => [])])
+      .then(([cs, bals]) => {
+        const byId = Object.fromEntries(bals.map(b => [b.customer_id, Number(b.balance)]))
+        setCustomers(cs.map(c => ({ ...c, balance: byId[c.id] || 0 })))
+      })
+      .catch(() => setCustomers([]))
   }, [staff.branch_id, date, locationId])
   useEffect(refresh, [refresh])
 
@@ -87,13 +93,9 @@ export default function SalesEntry({ boot }) {
   async function commit() {
     setBusy(true)
     try {
-      let customerId = paying.customerId
-      if (creditAmount(paying) > 0) {
-        if (!customerId && paying.newCustomer.trim()) {
-          const c = await createCustomer(staff.branch_id, paying.newCustomer, null)
-          customerId = c.id; setCustomers(cs => [...cs, c])
-        }
-        if (!customerId) { toast('Credit sales need a customer name.', 'error'); setBusy(false); return }
+      const customerId = paying.customerId
+      if (creditAmount(paying) > 0 && !customerId) {
+        toast('Credit sales need a customer — pick or add one.', 'error'); setBusy(false); return
       }
       const payments = paying.split
         ? methods.map(m => ({ method: m, amount: Number(paying.split[m] || 0) }))
@@ -382,17 +384,15 @@ export default function SalesEntry({ boot }) {
           {creditAmount(paying) > 0 && (
             <div className="mt-6">
               <div className="text-dim mb-2">Customer (for the credit)</div>
-              <select value={paying.customerId || ''}
-                onChange={e => setPaying(p => ({ ...p, customerId: e.target.value || null }))}
-                className="h-12 w-full px-3 rounded-xl bg-surface border border-line">
-                <option value="">— new customer —</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              {!paying.customerId && (
-                <input value={paying.newCustomer} placeholder="Customer name"
-                  onChange={e => setPaying(p => ({ ...p, newCustomer: e.target.value }))}
-                  className="mt-2 h-12 w-full px-3 rounded-xl bg-surface border border-line" />
-              )}
+              <CustomerPicker customers={customers} value={paying.customerId}
+                onPick={id => setPaying(p => ({ ...p, customerId: id }))}
+                onCreate={async (name, servedBy) => {
+                  try {
+                    const c = await createCustomer(staff.branch_id, name, servedBy)
+                    setCustomers(cs => cs.some(x => x.id === c.id) ? cs : [...cs, c])
+                    setPaying(p => ({ ...p, customerId: c.id }))
+                  } catch (e) { toast(e.message, 'error') }
+                }} />
             </div>
           )}
 
