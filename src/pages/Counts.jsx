@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadStockMap, loadCounts, loadCountLines, saveCountLine,
-         startCount, submitCount, verifyCount } from '../lib/data'
+         startCount, submitCount, verifyCount, deleteCount } from '../lib/data'
 
 const AUDITOR = ['auditor', 'gm', 'admin']
 const COUNTER = ['storekeeper', 'manager', 'gm', 'admin']
@@ -14,6 +14,7 @@ export default function Counts({ boot }) {
   const [stockMap, setStockMap] = useState({})
   const [open, setOpen] = useState(null)      // { count, lines }
   const [busy, setBusy] = useState(false)
+  const [confirmDel, setConfirmDel] = useState(null)
   const [newLoc, setNewLoc] = useState(allLocations[0]?.id)
 
   const itemById = useMemo(() => Object.fromEntries(items.map(i => [i.id, i])), [items])
@@ -52,6 +53,13 @@ export default function Counts({ boot }) {
     setBusy(true)
     try { await submitCount(open.count.id); setOpen(null); refresh() }
     catch (e) { alert(e.message) }
+    setBusy(false)
+  }
+
+  async function doDelete() {
+    setBusy(true)
+    try { await deleteCount(confirmDel.id); setConfirmDel(null); setOpen(null); refresh() }
+    catch (e) { alert('Not deleted: ' + e.message) }
     setBusy(false)
   }
 
@@ -163,7 +171,30 @@ export default function Counts({ boot }) {
             {open.count.status === 'submitted' && !canVerify && (
               <p className="text-center text-dim">Only an auditor can verify this count.</p>
             )}
+            {open.count.status !== 'verified' && (canCount || canVerify) && (
+              <button onClick={() => setConfirmDel(open.count)}
+                className="mt-3 w-full h-12 rounded-xl border border-clay text-clay font-semibold">
+                Delete this count
+              </button>
+            )}
           </div>
+        </div>
+      )}
+      {confirmDel && (
+        <div className="fixed inset-0 z-[60] bg-bg flex flex-col justify-center px-6">
+          <h2 className="text-2xl font-bold">Delete this count?</h2>
+          <p className="text-dim mt-2">
+            {locById[confirmDel.location_id]?.name} · {confirmDel.count_date || 'today'}
+          </p>
+          <p className="text-dim mt-3">
+            The count and everything entered on it are removed. Stock itself is
+            not affected — nothing has been posted yet.
+          </p>
+          <button onClick={doDelete} disabled={busy}
+            className="mt-6 w-full h-14 rounded-2xl bg-clay text-bg text-lg font-bold disabled:opacity-40">
+            {busy ? 'Deleting…' : 'Delete count'}
+          </button>
+          <button onClick={() => setConfirmDel(null)} className="mt-3 w-full h-12 text-dim">Cancel</button>
         </div>
       )}
     </div>

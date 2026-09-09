@@ -296,3 +296,10 @@ export async function verifyCount(countId) {
   const { error } = await supabase.rpc('verify_stock_count', { p_count: countId })
   if (error) throw error
 }
+
+export async function deleteCount(countId) {
+  const { error: e1 } = await supabase.from('stock_count_lines').delete().eq('count_id', countId)
+  if (e1) throw e1
+  const { error } = await supabase.from('stock_counts').delete().eq('id', countId)
+  if (error) throw error
+}
