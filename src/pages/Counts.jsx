@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadStockMap, loadCounts, loadCountLines, saveCountLine,
          startCount, submitCount, verifyCount, deleteCount } from '../lib/data'
+import { useToast } from '../components/Toast'
 
 const AUDITOR = ['auditor', 'gm', 'admin']
 const COUNTER = ['storekeeper', 'manager', 'gm', 'admin']
@@ -9,6 +10,7 @@ export default function Counts({ boot }) {
   const { staff, allLocations, items } = boot
   const canCount  = COUNTER.includes(staff.role)
   const canVerify = AUDITOR.includes(staff.role)
+  const toast = useToast()
 
   const [counts, setCounts] = useState(null)
   const [stockMap, setStockMap] = useState({})
@@ -21,7 +23,7 @@ export default function Counts({ boot }) {
   const locById  = useMemo(() => Object.fromEntries(allLocations.map(l => [l.id, l])), [allLocations])
 
   const refresh = useCallback(() => {
-    loadCounts(staff.branch_id).then(setCounts).catch(e => alert(e.message))
+    loadCounts(staff.branch_id).then(setCounts).catch(e => toast(e.message, 'error'))
     loadStockMap(staff.branch_id).then(setStockMap).catch(console.error)
   }, [staff.branch_id])
   useEffect(refresh, [refresh])
@@ -33,13 +35,13 @@ export default function Counts({ boot }) {
       refresh()
       const lines = await loadCountLines(id)
       setOpen({ count: { id, location_id: newLoc, status: 'draft' }, lines })
-    } catch (e) { alert(e.message) }
+    } catch (e) { toast(e.message, 'error') }
     setBusy(false)
   }
 
   async function openCount(c) {
     try { setOpen({ count: c, lines: await loadCountLines(c.id) }) }
-    catch (e) { alert(e.message) }
+    catch (e) { toast(e.message, 'error') }
   }
 
   async function setLine(itemId, value) {
@@ -52,21 +54,21 @@ export default function Counts({ boot }) {
   async function doSubmit() {
     setBusy(true)
     try { await submitCount(open.count.id); setOpen(null); refresh() }
-    catch (e) { alert(e.message) }
+    catch (e) { toast(e.message, 'error') }
     setBusy(false)
   }
 
   async function doDelete() {
     setBusy(true)
     try { await deleteCount(confirmDel.id); setConfirmDel(null); setOpen(null); refresh() }
-    catch (e) { alert('Not deleted: ' + e.message) }
+    catch (e) { toast('Not deleted: ' + e.message, 'error') }
     setBusy(false)
   }
 
   async function doVerify() {
     setBusy(true)
     try { await verifyCount(open.count.id); setOpen(null); refresh() }
-    catch (e) { alert(e.message) }
+    catch (e) { toast(e.message, 'error') }
     setBusy(false)
   }
 

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useToast } from '../components/Toast'
 import { naira, lagosToday } from '../lib/format'
 import { loadStockMap, loadPopular } from '../lib/data'
 import { supabase } from '../lib/supabase'
+import { enqueue, flush, isConnectionError } from '../lib/outbox'
 import ItemPicker from '../components/ItemPicker'
 
 export default function Store({ boot }) {
@@ -10,6 +12,7 @@ export default function Store({ boot }) {
   const store = locations.find(l => l.is_store)
   const departments = locations.filter(l => !l.is_store)
   const date = lagosToday()
+  const toast = useToast()
 
   const [mode, setMode] = useState('receive')       // receive | disburse
   const [stockMap, setStockMap] = useState({})
@@ -18,7 +21,6 @@ export default function Store({ boot }) {
   const [lines, setLines] = useState([])            // staged, saved together
   const [toDept, setToDept] = useState(departments[0]?.id)
   const [busy, setBusy] = useState(false)
-  const [toast, setToast] = useState(null)
 
   const refresh = useCallback(() => {
     const since = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10)
@@ -58,12 +60,17 @@ export default function Store({ boot }) {
         note: mode === 'receive' ? 'received into store'
           : `${issues ? 'issued to' : 'to'} ${dept?.name}`,
       }))
-      const { error } = await supabase.from('stock_movements').insert(rows)
-      if (error) throw error
-      setToast(`${rows.length} item${rows.length > 1 ? 's' : ''} ${mode === 'receive' ? 'received' : 'disbursed'}`)
-      setLines([]); refresh()
-      setTimeout(() => setToast(null), 2500)
-    } catch (e) { alert('Not saved: ' + e.message) }
+      try {
+        const { error } = await supabase.from('stock_movements').insert(rows)
+        if (error) throw error
+        toast(`${rows.length} item${rows.length > 1 ? 's' : ''} ${mode === 'receive' ? 'received' : 'disbursed'}`, 'success')
+      } catch (e) {
+        if (!isConnectionError(e)) throw e
+        enqueue({ kind: 'movements', payload: { rows } })
+        toast('No connection — saved and will send when you are back online')
+      }
+      setLines([]); refresh(); flush()
+    } catch (e) { toast('Not saved: ' + e.message, 'error') }
     setBusy(false)
   }
 
@@ -156,11 +163,6 @@ export default function Store({ boot }) {
           popular={popular} onPick={addLine} onClose={() => setPicking(false)} />
       )}
 
-      {toast && (
-        <div className="fixed bottom-24 inset-x-5 z-30 bg-raise border border-line rounded-xl px-4 py-3 text-center">
-          {toast}
-        </div>
-      )}
-    </div>
+          </div>
   )
 }

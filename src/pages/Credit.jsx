@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useToast } from '../components/Toast'
 import { naira, lagosToday, methodLabel } from '../lib/format'
 import { loadBalances, loadCustomerLedger, saveRepayment } from '../lib/data'
 
 export default function Credit({ boot }) {
   const { staff, items, methods } = boot
   const [rows, setRows] = useState(null)
+  const toast = useToast()
   const [open, setOpen] = useState(null)       // { customer, ledger }
   const [pay, setPay] = useState(null)
   const [busy, setBusy] = useState(false)
   const itemById = useMemo(() => Object.fromEntries(items.map(i => [i.id, i])), [items])
 
   const refresh = useCallback(() => {
-    loadBalances(staff.branch_id).then(setRows).catch(e => alert(e.message))
+    loadBalances(staff.branch_id).then(setRows).catch(e => toast(e.message, 'error'))
   }, [staff.branch_id])
   useEffect(refresh, [refresh])
 
@@ -19,7 +21,7 @@ export default function Credit({ boot }) {
     try {
       const ledger = await loadCustomerLedger(staff.branch_id, c.customer_id)
       setOpen({ customer: c, ledger })
-    } catch (e) { alert(e.message) }
+    } catch (e) { toast(e.message, 'error') }
   }
 
   async function submitPayment() {
@@ -30,7 +32,7 @@ export default function Credit({ boot }) {
         method: pay.method, paidOn: pay.paidOn, note: pay.note,
       })
       setPay(null); setOpen(null); refresh()
-    } catch (e) { alert('Not saved: ' + e.message) }
+    } catch (e) { toast('Not saved: ' + e.message, 'error') }
     setBusy(false)
   }
 

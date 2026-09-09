@@ -91,3 +91,22 @@ staff member's usual bar, and anyone can switch. Awka's OpenBar staff
 ring up Lounge-priced sales via the tier chips on the same screen.
 Recording is open to all active staff for their own branch; editing
 and deleting history stay manager-only (enforced by RLS, not the UI).
+
+
+## Offline behaviour
+
+Writes that fail because the connection dropped are kept in
+localStorage and retried automatically when it returns (`src/lib/outbox.js`).
+A banner shows how many entries are waiting. Only connection errors are
+queued — a real rejection (bad data, a permission error) surfaces to the
+user immediately instead of being silently swallowed.
+
+## Sales are recorded as a basket
+
+Add several items, adjust tier and price per line, then take payment once.
+The payment split is allocated across the lines automatically. Overdrawing
+a location asks for confirmation rather than blocking.
+
+## Backups
+
+See BACKUP.md.

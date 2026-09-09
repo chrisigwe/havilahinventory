@@ -1,19 +1,17 @@
 import { supabase } from '../lib/supabase'
 import Logo from './Logo'
+import PendingBanner from './PendingBanner'
 
 const STOCK_ROLES = ['storekeeper', 'manager', 'gm', 'admin']
-const FIX_ROLES = ['storekeeper', 'manager', 'gm', 'admin']
-const CREDIT_ROLES = ['bar', 'storekeeper', 'manager', 'gm', 'admin']
-const COUNT_ROLES = ['storekeeper', 'manager', 'gm', 'admin', 'auditor']
+
+const MORE = ['credit', 'count', 'catalog', 'fix']
 
 export default function Shell({ staff, tab, onTab, children }) {
   const auditorOnly = staff.role === 'auditor'
   const tabs = auditorOnly ? [] : [['sales', 'Sales']]
   if (STOCK_ROLES.includes(staff.role)) tabs.push(['store', 'Store'])
   tabs.push(['stock', 'Stock'])
-  if (CREDIT_ROLES.includes(staff.role)) tabs.push(['credit', 'Credit'])
-  if (COUNT_ROLES.includes(staff.role)) tabs.push(['count', 'Count'])
-  if (FIX_ROLES.includes(staff.role)) tabs.push(['fix', 'Fix'])
+  tabs.push(['more', 'More'])
   return (
     <div className="min-h-dvh pb-24">
       <header className="px-5 pt-5 pb-3 flex items-center justify-between gap-3">
@@ -24,12 +22,13 @@ export default function Shell({ staff, tab, onTab, children }) {
         </div>
         <button onClick={() => supabase.auth.signOut()} className="text-dim text-sm shrink-0">Sign out</button>
       </header>
+      <PendingBanner />
       {children}
-      <nav className="fixed bottom-0 inset-x-0 bg-surface border-t border-line flex overflow-x-auto"
+      <nav className="fixed bottom-0 inset-x-0 bg-surface border-t border-line flex"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {tabs.map(([k, label]) => (
           <button key={k} onClick={() => onTab(k)}
-            className={`flex-1 min-w-[5rem] h-16 text-base font-semibold ${tab === k ? 'text-amber' : 'text-dim'}`}>
+            className={`flex-1 h-16 text-lg font-semibold ${tab === k || (k === 'more' && MORE.includes(tab)) ? 'text-amber' : 'text-dim'}`}>
             {label}
           </button>
         ))}

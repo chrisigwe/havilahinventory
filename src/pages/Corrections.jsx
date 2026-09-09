@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { naira, tierLabel } from '../lib/format'
-import { loadActivity, deleteEntry, updateEntry, loadAudit } from '../lib/data'
+import { naira, tierLabel, methodLabel } from '../lib/format'
+import { loadActivity, deleteEntry, updateEntry, loadAudit,
+         loadSalePayments, updateSaleWithPayments } from '../lib/data'
+import { useToast } from '../components/Toast'
 
 export default function Corrections({ boot }) {
-  const { staff, allLocations, items } = boot
+  const { staff, allLocations, items, methods } = boot
+  const toast = useToast()
   const canEdit = ['storekeeper', 'manager', 'gm', 'admin'].includes(staff.role)
   const [rows, setRows] = useState(null)
   const [view, setView] = useState(canEdit ? 'entries' : 'history')
@@ -11,13 +14,12 @@ export default function Corrections({ boot }) {
   const [edit, setEdit] = useState(null)
   const [confirm, setConfirm] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [toast, setToast] = useState(null)
 
   const itemById = useMemo(() => Object.fromEntries(items.map(i => [i.id, i])), [items])
   const locById  = useMemo(() => Object.fromEntries(allLocations.map(l => [l.id, l])), [allLocations])
 
   const refresh = useCallback(() => {
-    if (canEdit) loadActivity(staff.branch_id).then(setRows).catch(e => alert(e.message))
+    if (canEdit) loadActivity(staff.branch_id).then(setRows).catch(e => toast(e.message, 'error'))
     loadAudit(staff.branch_id).then(setAudit).catch(() => setAudit([]))
   }, [staff.branch_id, canEdit])
   useEffect(refresh, [refresh])
@@ -39,24 +41,47 @@ export default function Corrections({ boot }) {
              money: r.unit_cost ? naira(r.qty * r.unit_cost) : '' }
   }
 
+  async function openEdit(r) {
+    const base = { row: r, qty: r.qty,
+      price: r.kind === 'sale' ? r.unit_price : (r.unit_cost ?? ''), payments: null }
+    if (r.kind === 'sale') {
+      try {
+        const pays = await loadSalePayments(r.id)
+        // keep the split intact instead of collapsing it to one method
+        base.payments = Object.fromEntries(
+          methods.map(m => [m, String(pays.find(p => p.method === m)?.amount ?? '')]))
+        base.wasSplit = pays.length > 1
+      } catch (e) { toast(e.message, 'error') }
+    }
+    setEdit(base)
+  }
+
   async function doDelete() {
     setBusy(true)
     try {
       await deleteEntry(confirm)
-      setToast('Entry deleted'); setConfirm(null); refresh()
-      setTimeout(() => setToast(null), 2500)
-    } catch (e) { alert('Not deleted: ' + e.message) }
+      toast('Entry deleted', 'success'); setConfirm(null); refresh()
+    } catch (e) { toast('Not deleted: ' + e.message, 'error') }
     setBusy(false)
   }
 
   async function doSave() {
     setBusy(true)
     try {
-      await updateEntry({ ...edit.row, branch_id: staff.branch_id },
-        { qty: Number(edit.qty), unitPrice: edit.price === '' ? null : Number(edit.price) })
-      setToast('Entry updated'); setEdit(null); refresh()
-      setTimeout(() => setToast(null), 2500)
-    } catch (e) { alert('Not updated: ' + e.message) }
+      const qty = Number(edit.qty)
+      const unitPrice = edit.price === '' ? null : Number(edit.price)
+      if (edit.row.kind === 'sale') {
+        const payments = methods.map(m => ({ method: m, amount: Number(edit.payments?.[m] || 0) }))
+        const entered = payments.reduce((s, p) => s + p.amount, 0)
+        if (Math.abs(entered - qty * unitPrice) > 0.01) {
+          toast('Payments must add up to ' + naira(qty * unitPrice), 'error'); setBusy(false); return
+        }
+        await updateSaleWithPayments(edit.row.id, { qty, unitPrice, payments })
+      } else {
+        await updateEntry({ ...edit.row, branch_id: staff.branch_id }, { qty, unitPrice })
+      }
+      toast('Entry updated', 'success'); setEdit(null); refresh()
+    } catch (e) { toast('Not updated: ' + e.message, 'error') }
     setBusy(false)
   }
 
@@ -123,8 +148,7 @@ export default function Corrections({ boot }) {
                 {d.money && <span className="tnum text-dim">{d.money}</span>}
               </div>
               <div className="flex gap-2 mt-2">
-                <button onClick={() => setEdit({ row: r, qty: r.qty,
-                  price: r.kind === 'sale' ? r.unit_price : (r.unit_cost ?? '') })}
+                <button onClick={() => openEdit(r)}
                   className="h-10 px-4 rounded-lg border border-line text-sm font-semibold">Edit</button>
                 <button onClick={() => setConfirm(r)}
                   className="h-10 px-4 rounded-lg border border-clay text-clay text-sm font-semibold">Delete</button>
@@ -151,10 +175,25 @@ export default function Corrections({ boot }) {
           <input type="number" inputMode="decimal" value={edit.price}
             onChange={e => setEdit({ ...edit, price: e.target.value })}
             className="mt-2 h-14 w-full px-4 rounded-xl bg-surface border border-line tnum" />
-          {edit.row.kind === 'sale' && (
-            <p className="text-dim text-sm mt-3">
-              The payment record will be restated to match the new total.
-            </p>
+          {edit.row.kind === 'sale' && edit.payments && (
+            <div className="mt-5">
+              <div className="text-dim mb-2">
+                How it was paid{edit.wasSplit ? ' (split preserved)' : ''}
+              </div>
+              {methods.map(m => (
+                <div key={m} className="flex items-center gap-3 mt-2">
+                  <span className="w-20 text-dim">{methodLabel[m] || m}</span>
+                  <input type="number" inputMode="decimal" placeholder="0"
+                    value={edit.payments[m]}
+                    onChange={e => setEdit(x => ({ ...x,
+                      payments: { ...x.payments, [m]: e.target.value } }))}
+                    className="h-12 flex-1 px-3 rounded-xl bg-surface border border-line tnum" />
+                </div>
+              ))}
+              <p className="text-dim text-sm mt-2">
+                Must total {naira(Number(edit.qty) * Number(edit.price || 0))}
+              </p>
+            </div>
           )}
           <button onClick={doSave} disabled={busy}
             className="mt-6 w-full h-14 rounded-2xl bg-amber text-bg text-lg font-bold disabled:opacity-40">
@@ -178,11 +217,6 @@ export default function Corrections({ boot }) {
         </Sheet>
       )}
 
-      {toast && (
-        <div className="fixed bottom-24 inset-x-5 z-30 bg-raise border border-line rounded-xl px-4 py-3 text-center">
-          {toast}
-        </div>
-      )}
     </div>
   )
 }

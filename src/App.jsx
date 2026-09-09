@@ -6,6 +6,11 @@ import SalesEntry from './pages/SalesEntry'
 import Stock from './pages/Stock'
 import Store from './pages/Store'
 import Corrections from './pages/Corrections'
+import Catalog from './pages/Catalog'
+import More from './pages/More'
+import { ToastHost } from './components/Toast'
+import { registerHandlers, flush } from './lib/outbox'
+import { saveBasket, saveWriteoff, saveMovements } from './lib/data'
 import Credit from './pages/Credit'
 import Counts from './pages/Counts'
 import Shell from './components/Shell'
@@ -29,6 +34,22 @@ export default function App() {
 
   useEffect(refresh, [refresh])
 
+  // queued writes replay with the same code path as live ones
+  useEffect(() => {
+    registerHandlers({
+      basket: (p) => saveBasket({
+        staff: p.staffLite, locationId: p.locationId, date: p.date,
+        customerId: p.customerId, payments: p.payments, lines: p.lines,
+      }),
+      movements: (p) => saveMovements(p.rows),
+      writeoff: (p) => saveWriteoff({
+        staff: p.staffLite, item: { id: p.itemId }, locationId: p.locationId,
+        kind: p.kind, qty: p.qty, unitValue: p.unitValue, date: p.date,
+      }),
+    })
+    flush()
+  }, [])
+
   if (session === undefined) return <Center>Loading…</Center>
   if (!session) return <Login />
   if (err) return <Center>Couldn't load your profile. {err}</Center>
@@ -44,14 +65,18 @@ export default function App() {
   )
 
   return (
+    <ToastHost>
     <Shell staff={boot.staff} tab={tab} onTab={setTab}>
       {tab === 'sales' ? <SalesEntry boot={boot} />
         : tab === 'store' ? <Store boot={boot} />
+        : tab === 'more' ? <More boot={boot} onGo={setTab} />
+        : tab === 'catalog' ? <Catalog boot={boot} onChanged={refresh} />
         : tab === 'credit' ? <Credit boot={boot} />
         : tab === 'count' ? <Counts boot={boot} />
         : tab === 'fix' ? <Corrections boot={boot} />
         : <Stock boot={boot} />}
     </Shell>
+    </ToastHost>
   )
 }
 

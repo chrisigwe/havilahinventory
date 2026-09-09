@@ -54,13 +54,13 @@ export async function loadStockMap(branchId) {
 }
 
 // most-sold item ids over the last 14 days, for picker ordering
-export async function loadPopular(branchId, sinceDate) {
+export async function loadPopular(branchId) {
   const { data, error } = await supabase
-    .from('sales').select('stock_item_id, qty')
-    .eq('branch_id', branchId).gte('business_date', sinceDate)
+    .from('v_item_popularity').select('stock_item_id, qty_sold')
+    .eq('branch_id', branchId)
   if (error) throw error
   const c = {}
-  for (const r of data) c[r.stock_item_id] = (c[r.stock_item_id] || 0) + Number(r.qty)
+  for (const r of data) c[r.stock_item_id] = Number(r.qty_sold)
   return c
 }
 
@@ -72,6 +72,45 @@ export async function loadToday(branchId, date) {
     .order('created_at', { ascending: false })
   if (error) throw error
   return data
+}
+
+// Records a basket: one sales row per line, with the basket's payment
+// split allocated across those lines in order.
+export async function saveBasket({ staff, locationId, lines, payments, date, customerId }) {
+  const buckets = payments.filter(p => Number(p.amount) > 0)
+    .map(p => ({ method: p.method, left: Number(p.amount) }))
+  for (const line of lines) {
+    const amount = Number((line.qty * line.unitPrice).toFixed(2))
+    const { data: sale, error } = await supabase.from('sales').insert({
+      branch_id: staff.branch_id,
+      business_date: date,
+      occurred_at: new Date().toISOString(),
+      stock_item_id: line.item.id,
+      location_id: locationId,
+      tier: line.tier,
+      qty: line.qty,
+      unit_price: line.unitPrice,
+      customer_id: customerId || null,
+      recorded_by: staff.id,
+    }).select('id').single()
+    if (error) throw error
+
+    let owing = amount
+    const rows = []
+    for (const b of buckets) {
+      if (owing <= 0.001 || b.left <= 0.001) continue
+      const take = Math.min(owing, b.left)
+      rows.push({ sale_id: sale.id, method: b.method, amount: Number(take.toFixed(2)) })
+      b.left -= take; owing -= take
+    }
+    if (owing > 0.001 && buckets.length) {
+      rows.push({ sale_id: sale.id, method: buckets[0].method, amount: Number(owing.toFixed(2)) })
+    }
+    if (rows.length) {
+      const { error: e2 } = await supabase.from('sale_payments').insert(rows)
+      if (e2) throw e2
+    }
+  }
 }
 
 export async function saveSale({ staff, item, locationId, tier, qty, unitPrice, payments, date, customerId }) {
@@ -286,9 +325,7 @@ export async function saveCountLine(countId, itemId, qty) {
 }
 
 export async function submitCount(countId) {
-  const { error } = await supabase.from('stock_counts')
-    .update({ status: 'submitted', submitted_at: new Date().toISOString() })
-    .eq('id', countId)
+  const { error } = await supabase.rpc('submit_stock_count', { p_count: countId })
   if (error) throw error
 }
 
@@ -301,5 +338,46 @@ export async function deleteCount(countId) {
   const { error: e1 } = await supabase.from('stock_count_lines').delete().eq('count_id', countId)
   if (e1) throw e1
   const { error } = await supabase.from('stock_counts').delete().eq('id', countId)
+  if (error) throw error
+}
+
+
+// ---------- catalog ----------
+export async function saveItemPrices(itemId, patch) {
+  const { error } = await supabase.from('stock_items').update(patch).eq('id', itemId)
+  if (error) throw error
+}
+
+export async function createItem(branchId, fields) {
+  const { data, error } = await supabase.from('stock_items')
+    .insert({ branch_id: branchId, ...fields }).select('*').single()
+  if (error) throw error
+  return data
+}
+
+// ---------- split-payment aware corrections ----------
+export async function loadSalePayments(saleId) {
+  const { data, error } = await supabase.from('sale_payments')
+    .select('id, method, amount').eq('sale_id', saleId)
+  if (error) throw error
+  return data
+}
+
+export async function updateSaleWithPayments(saleId, { qty, unitPrice, payments }) {
+  const { error } = await supabase.from('sales')
+    .update({ qty, unit_price: unitPrice }).eq('id', saleId)
+  if (error) throw error
+  const { error: e1 } = await supabase.from('sale_payments').delete().eq('sale_id', saleId)
+  if (e1) throw e1
+  const rows = payments.filter(p => Number(p.amount) > 0)
+    .map(p => ({ sale_id: saleId, method: p.method, amount: Number(p.amount) }))
+  if (rows.length) {
+    const { error: e2 } = await supabase.from('sale_payments').insert(rows)
+    if (e2) throw e2
+  }
+}
+
+export async function saveMovements(rows) {
+  const { error } = await supabase.from('stock_movements').insert(rows)
   if (error) throw error
 }
