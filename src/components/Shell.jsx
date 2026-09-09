@@ -11,13 +11,13 @@ export default function Shell({ staff, tab, onTab, children }) {
   if (FIX_ROLES.includes(staff.role)) tabs.push(['fix', 'Fix'])
   return (
     <div className="min-h-dvh pb-24">
-      <header className="px-5 pt-5 pb-3 flex items-baseline justify-between">
+      <header className="px-5 pt-5 pb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <Logo className="w-5 h-5 shrink-0 text-amber" />
           <span className="font-bold text-lg shrink-0">Havilah</span>
-          <span className="text-dim text-lg truncate">· {staff.full_name}</span>
+          <span className="text-dim text-sm truncate">· {staff.full_name}</span>
         </div>
-        <button onClick={() => supabase.auth.signOut()} className="text-dim text-sm">Sign out</button>
+        <button onClick={() => supabase.auth.signOut()} className="text-dim text-sm shrink-0">Sign out</button>
       </header>
       {children}
       <nav className="fixed bottom-0 inset-x-0 bg-surface border-t border-line flex"
