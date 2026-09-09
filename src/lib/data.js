@@ -76,7 +76,7 @@ export async function loadToday(branchId, date) {
 
 // Records a basket: one sales row per line, with the basket's payment
 // split allocated across those lines in order.
-export async function saveBasket({ staff, locationId, lines, payments, date, customerId }) {
+export async function saveBasket({ staff, locationId, lines, payments, date, customerId, backdateReason }) {
   const buckets = payments.filter(p => Number(p.amount) > 0)
     .map(p => ({ method: p.method, left: Number(p.amount) }))
   for (const line of lines) {
@@ -91,6 +91,7 @@ export async function saveBasket({ staff, locationId, lines, payments, date, cus
       qty: line.qty,
       unit_price: line.unitPrice,
       customer_id: customerId || null,
+      backdate_reason: backdateReason || null,
       recorded_by: staff.id,
     }).select('id').single()
     if (error) throw error
@@ -220,6 +221,48 @@ export async function loadAudit(branchId, limit = 100) {
   return data
 }
 
+// ---------- reconciliation ----------
+export async function loadReconciliation(branchId, date, locationId) {
+  let q = supabase.from('v_reconciliation')
+    .select('gross_sales, received_at_sale, credit_raised, debt_recovered, total_money_in, location_id')
+    .eq('branch_id', branchId).eq('business_date', date)
+  if (locationId) q = q.eq('location_id', locationId)
+  const [rec, debt] = await Promise.all([
+    q,
+    supabase.from('v_debt_recovered_daily').select('amount')
+      .eq('branch_id', branchId).eq('business_date', date),
+  ])
+  if (rec.error) throw rec.error
+  const gross = (rec.data || []).reduce((s, r) => s + Number(r.gross_sales || 0), 0)
+  const received = (rec.data || []).reduce((s, r) => s + Number(r.received_at_sale || 0), 0)
+  // debt recovery is branch-wide, not per location, so take it once
+  const recovered = (debt.data || []).reduce((s, r) => s + Number(r.amount || 0), 0)
+  return {
+    grossSales: gross,
+    received,
+    creditRaised: gross - received,
+    debtRecovered: recovered,
+    totalMoneyIn: received + recovered,
+  }
+}
+
+export async function loadVariances(branchId, days = 30) {
+  const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10)
+  const { data, error } = await supabase.from('v_sale_variances')
+    .select('sale_id, business_date, item_name, qty, unit_price, expected, allocated, difference, recorded_by_name')
+    .eq('branch_id', branchId).gte('business_date', since)
+    .order('business_date', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function loadOpeningDate(branchId) {
+  const { data, error } = await supabase.from('branches')
+    .select('opening_balance_date').eq('id', branchId).maybeSingle()
+  if (error) return null
+  return data?.opening_balance_date || null
+}
+
 // ---------- daily money summary ----------
 export async function loadDailySummary(branchId, date) {
   const [takings, nonRev] = await Promise.all([
@@ -326,6 +369,27 @@ export async function saveCountLine(countId, itemId, qty) {
 
 export async function submitCount(countId) {
   const { error } = await supabase.rpc('submit_stock_count', { p_count: countId })
+  if (error) throw error
+}
+
+export async function startCountOfType({ staff, locationId, stockMap, items, countType, countDate }) {
+  const { data: count, error } = await supabase.from('stock_counts').insert({
+    branch_id: staff.branch_id, location_id: locationId,
+    counted_by: staff.id, status: 'draft',
+    count_type: countType, count_date: countDate,
+  }).select('id').single()
+  if (error) throw error
+  const lines = items.map(i => ({
+    count_id: count.id, stock_item_id: i.id,
+    system_qty: stockMap[`${i.id}:${locationId}`] ?? 0, counted_qty: null,
+  }))
+  const { error: e2 } = await supabase.from('stock_count_lines').insert(lines)
+  if (e2) throw e2
+  return count.id
+}
+
+export async function postOpeningBalance(countId) {
+  const { error } = await supabase.rpc('post_opening_balance', { p_count: countId })
   if (error) throw error
 }
 

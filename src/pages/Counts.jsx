@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadStockMap, loadCounts, loadCountLines, saveCountLine,
-         startCount, submitCount, verifyCount, deleteCount } from '../lib/data'
+         startCount, startCountOfType, submitCount, verifyCount, deleteCount,
+         postOpeningBalance } from '../lib/data'
+import { lagosToday } from '../lib/format'
 import { useToast } from '../components/Toast'
 
 const AUDITOR = ['auditor', 'gm', 'admin']
@@ -18,6 +20,8 @@ export default function Counts({ boot }) {
   const [busy, setBusy] = useState(false)
   const [confirmDel, setConfirmDel] = useState(null)
   const [newLoc, setNewLoc] = useState(allLocations[0]?.id)
+  const [newType, setNewType] = useState('count')
+  const [newDate, setNewDate] = useState(lagosToday())
 
   const itemById = useMemo(() => Object.fromEntries(items.map(i => [i.id, i])), [items])
   const locById  = useMemo(() => Object.fromEntries(allLocations.map(l => [l.id, l])), [allLocations])
@@ -31,10 +35,12 @@ export default function Counts({ boot }) {
   async function begin() {
     setBusy(true)
     try {
-      const id = await startCount({ staff, locationId: newLoc, stockMap, items })
+      const id = await startCountOfType({ staff, locationId: newLoc, stockMap, items,
+        countType: newType, countDate: newDate })
       refresh()
       const lines = await loadCountLines(id)
-      setOpen({ count: { id, location_id: newLoc, status: 'draft' }, lines })
+      setOpen({ count: { id, location_id: newLoc, status: 'draft',
+                         count_type: newType, count_date: newDate }, lines })
     } catch (e) { toast(e.message, 'error') }
     setBusy(false)
   }
@@ -65,6 +71,14 @@ export default function Counts({ boot }) {
     setBusy(false)
   }
 
+  async function doPostOpening() {
+    setBusy(true)
+    try { await postOpeningBalance(open.count.id); setOpen(null); refresh()
+          toast('Posted — system quantities now match the count', 'success') }
+    catch (e) { toast(e.message, 'error') }
+    setBusy(false)
+  }
+
   async function doVerify() {
     setBusy(true)
     try { await verifyCount(open.count.id); setOpen(null); refresh() }
@@ -81,6 +95,18 @@ export default function Counts({ boot }) {
       {canCount && (
         <div className="py-3">
           <div className="text-dim mb-2">Start a new count</div>
+          <div className="flex gap-2 mb-2">
+            {[['count', 'Stock count'], ['opening', 'Opening balance']].map(([k, label]) => (
+              <button key={k} onClick={() => setNewType(k)}
+                className={`flex-1 h-11 rounded-xl border font-semibold ${newType === k
+                  ? 'bg-amber text-bg border-amber' : 'border-line text-dim'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <input type="date" value={newDate} max={lagosToday()}
+            onChange={e => setNewDate(e.target.value)}
+            className="w-full h-12 px-3 mb-2 rounded-xl bg-surface border border-line tnum" />
           <div className="flex gap-2">
             <select value={newLoc} onChange={e => setNewLoc(e.target.value)}
               className="flex-1 h-12 px-3 rounded-xl bg-surface border border-line">
@@ -120,7 +146,9 @@ export default function Counts({ boot }) {
               {locById[open.count.location_id]?.name}
             </h2>
             <p className="text-dim">
-              {open.count.status === 'draft' ? 'Enter what is physically there.'
+              {open.count.count_type === 'opening' && open.count.status === 'draft'
+                ? 'Opening balance — posts straight to stock, no auditor step.'
+                : open.count.status === 'draft' ? 'Enter what is physically there.'
                 : open.count.status === 'submitted' ? 'Submitted — awaiting the auditor.'
                 : 'Verified. Variances were posted as adjustments.'}
             </p>
@@ -158,7 +186,13 @@ export default function Counts({ boot }) {
           </div>
 
           <div className="p-5 border-t border-line">
-            {open.count.status === 'draft' && canCount && (
+            {open.count.status === 'draft' && canCount && open.count.count_type === 'opening' && (
+              <button onClick={doPostOpening} disabled={busy}
+                className="w-full h-16 rounded-2xl bg-amber text-bg text-xl font-bold disabled:opacity-40">
+                {busy ? 'Posting…' : 'Post opening balance'}
+              </button>
+            )}
+            {open.count.status === 'draft' && canCount && open.count.count_type !== 'opening' && (
               <button onClick={doSubmit} disabled={busy}
                 className="w-full h-16 rounded-2xl bg-amber text-bg text-xl font-bold disabled:opacity-40">
                 {busy ? 'Submitting…' : 'Submit for verification'}

@@ -5,6 +5,8 @@ const ITEMS = [
     roles: ['storekeeper', 'manager', 'gm', 'admin', 'auditor'] },
   { key: 'catalog', label: 'Catalog', hint: 'Items, prices and what is active',
     roles: ['storekeeper', 'manager', 'gm', 'admin'] },
+  { key: 'variance', label: 'Variances', hint: 'Sales where collection did not match the goods sold',
+    roles: ['storekeeper', 'manager', 'gm', 'admin'] },
   { key: 'fix',     label: 'Corrections', hint: 'Edit or delete entries, and change history',
     roles: ['storekeeper', 'manager', 'gm', 'admin'] },
 ]

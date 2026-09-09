@@ -110,3 +110,42 @@ a location asks for confirmation rather than blocking.
 ## Backups
 
 See BACKUP.md.
+
+
+## Sales reporting model (change request section 4)
+
+Gross Sales and money collected are separate figures and are never
+summed together:
+
+    Gross Sales      = sum(qty x unit price)      -- goods off the shelf
+    Received at sale = POS + Cash on those sales
+    Credit raised    = Gross Sales - Received     -- derived, not typed
+    Debt recovered   = repayments received today against earlier credit
+    Total money in   = Received + Debt recovered
+
+Debt recovery never increases Gross Sales. The panel on the Sales
+screen shows all five, per location per day, for checking against the
+Book of Records. Views: `v_reconciliation`, `v_debt_recovered_daily`.
+
+## Backdating
+
+The date on a sale defaults to today. Storekeeper/manager/gm/admin can
+change it; bar staff cannot (enforced by `validate_sale_date()`, not the
+UI). Future dates are refused, and nothing may be dated before the
+branch's `opening_balance_date`. Backdated rows carry an optional reason
+and show a "backdated" marker. All reporting keys off `business_date`.
+
+## Opening balances
+
+More > Stock count > Opening balance: pick a location and date, enter
+counted quantities, post. Writes adjustment movements for
+(counted - system) and sets the branch's opening-balance date, which
+then bounds backdating. Manager-only, and deliberately skips the
+auditor step — every such posting is written to the audit log saying so.
+
+## Variances
+
+More > Variances lists any sale where POS + Cash + Credit does not equal
+quantity x unit price, with operator and amount (`v_sale_variances`).
+Bar staff cannot save an unbalanced sale at all; managers can override
+with a confirmation, and the override lands here.

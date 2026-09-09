@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { naira, lagosToday, tierLabel, methodLabel } from '../lib/format'
 import { loadStockMap, loadPopular, loadToday, saveBasket, saveWriteoff,
-         loadDailySummary, loadCustomers, createCustomer } from '../lib/data'
+         loadDailySummary, loadCustomers, createCustomer,
+         loadReconciliation, loadOpeningDate } from '../lib/data'
 import { enqueue, flush, isConnectionError } from '../lib/outbox'
 import { useToast } from '../components/Toast'
 import ItemPicker from '../components/ItemPicker'
@@ -10,13 +11,18 @@ export default function SalesEntry({ boot }) {
   const { staff, locations, tiers, methods, items } = boot
   const toast = useToast()
   const salesPoints = locations.filter(l => l.is_sales_point && !l.is_store)
-  const date = lagosToday()
+  const canBackdate = ['storekeeper', 'manager', 'gm', 'admin'].includes(staff.role)
+  const todayDate = lagosToday()
+  const [date, setDate] = useState(todayDate)
+  const [openingDate, setOpeningDate] = useState(null)
+  const [backdateReason, setBackdateReason] = useState('')
 
   const [locationId, setLocationId] = useState(staff.default_location_id || salesPoints[0]?.id)
   const [stockMap, setStockMap] = useState({})
   const [popular, setPopular] = useState({})
   const [today, setToday] = useState([])
   const [summary, setSummary] = useState(null)
+  const [recon, setRecon] = useState(null)
   const [customers, setCustomers] = useState([])
 
   const [basket, setBasket] = useState([])          // [{ key, item, tier, qty, unitPrice }]
@@ -33,8 +39,10 @@ export default function SalesEntry({ boot }) {
     loadPopular(staff.branch_id).then(setPopular).catch(() => {})
     loadToday(staff.branch_id, date).then(setToday).catch(() => {})
     loadDailySummary(staff.branch_id, date).then(setSummary).catch(() => {})
+    loadReconciliation(staff.branch_id, date, locationId).then(setRecon).catch(() => {})
+    loadOpeningDate(staff.branch_id).then(setOpeningDate).catch(() => {})
     loadCustomers(staff.branch_id).then(setCustomers).catch(() => setCustomers([]))
-  }, [staff.branch_id, date])
+  }, [staff.branch_id, date, locationId])
   useEffect(refresh, [refresh])
 
   const priceFor = (item, tier) =>
@@ -91,15 +99,27 @@ export default function SalesEntry({ boot }) {
         ? methods.map(m => ({ method: m, amount: Number(paying.split[m] || 0) }))
         : [{ method: paying.method, amount: basketTotal }]
 
+      const allocated = payments.reduce((s, p) => s + p.amount, 0)
+      const diff = Number((basketTotal - allocated).toFixed(2))
+      if (Math.abs(diff) > 0.005) {
+        const msg = diff > 0
+          ? `${naira(diff)} unaccounted. Record it as credit, or correct the amount.`
+          : `${naira(-diff)} more allocated than the sale is worth.`
+        if (!canBackdate) { toast(msg, 'error'); setBusy(false); return }
+        if (!window.confirm(msg + '\n\nSave anyway? It will appear in the variance report.')) {
+          setBusy(false); return
+        }
+      }
+
       const payload = {
         staffLite: { id: staff.id, branch_id: staff.branch_id },
         locationId, date, customerId,
         lines: basket.map(l => ({ item: { id: l.item.id, name: l.item.name },
                                   tier: l.tier, qty: l.qty, unitPrice: l.unitPrice })),
-        payments,
+        payments, backdateReason,
       }
       try {
-        await saveBasket({ staff, locationId, lines: basket, payments, date, customerId })
+        await saveBasket({ staff, locationId, lines: basket, payments, date, customerId, backdateReason })
         toast(`Saved · ${basket.length} item${basket.length > 1 ? 's' : ''} · ${naira(basketTotal)}`, 'success')
       } catch (e) {
         if (!isConnectionError(e)) throw e
@@ -147,9 +167,29 @@ export default function SalesEntry({ boot }) {
         ))}
       </div>
 
+      {canBackdate ? (
+        <div className="mt-2 flex items-center gap-3">
+          <input type="date" value={date} max={todayDate} min={openingDate || undefined}
+            onChange={e => setDate(e.target.value)}
+            className={`h-12 px-3 rounded-xl bg-surface border tnum ${date !== todayDate
+              ? 'border-amber text-amber' : 'border-line'}`} />
+          {date !== todayDate && (
+            <input value={backdateReason} placeholder="Reason (optional)"
+              onChange={e => setBackdateReason(e.target.value)}
+              className="h-12 flex-1 px-3 rounded-xl bg-surface border border-line" />
+          )}
+        </div>
+      ) : null}
+      {date !== todayDate && (
+        <p className="mt-2 text-amber text-sm">
+          Posting to {new Date(date + 'T12:00:00').toLocaleDateString('en-NG',
+            { weekday: 'long', day: 'numeric', month: 'long' })} — not today.
+        </p>
+      )}
+
       <button onClick={() => setPicking(true)}
         className="mt-3 w-full h-16 rounded-2xl bg-amber text-bg text-xl font-bold active:bg-amber-deep">
-        + Add item
+        + Sell Item
       </button>
 
       {!!basket.length && (
@@ -190,6 +230,23 @@ export default function SalesEntry({ boot }) {
           <span className="tnum font-bold text-lg">{naira(todayTotal)}</span>
         </div>
 
+        {recon && (
+          <div className="mt-3 rounded-2xl border border-amber bg-surface p-4">
+            <div className="text-dim text-sm">Gross sales — value of goods sold</div>
+            <div className="tnum text-3xl font-bold text-amber">{naira(recon.grossSales)}</div>
+            <div className="mt-3 space-y-1 text-sm">
+              <Line label="Received at sale (POS + Cash)" value={recon.received} />
+              <Line label="Credit raised" value={recon.creditRaised}
+                tone={recon.creditRaised > 0 ? 'text-clay' : ''} />
+              <Line label="Debt recovered (earlier sales)" value={recon.debtRecovered} tone="text-leaf" />
+              <div className="pt-2 mt-2 border-t border-line flex justify-between font-bold">
+                <span>Total money in</span>
+                <span className="tnum">{naira(recon.totalMoneyIn)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {summary && (
           <div className="mt-3 rounded-2xl border border-line bg-surface p-4">
             <div className="grid grid-cols-3 gap-3">
@@ -219,7 +276,12 @@ export default function SalesEntry({ boot }) {
             <li key={r.id} className="py-3 flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{itemById[r.stock_item_id]?.name || '—'}</div>
-                <div className="text-dim text-sm">{tierLabel[r.tier] || r.tier} · {r.qty} × {naira(r.unit_price)}</div>
+                <div className="text-dim text-sm">
+                  {tierLabel[r.tier] || r.tier} · {r.qty} × {naira(r.unit_price)}
+                  {r.business_date !== r.created_at?.slice(0, 10) && (
+                    <span className="ml-2 text-amber">backdated</span>
+                  )}
+                </div>
               </div>
               <div className="tnum font-semibold">{naira(r.amount ?? r.qty * r.unit_price)}</div>
             </li>
@@ -293,6 +355,16 @@ export default function SalesEntry({ boot }) {
             </Chip>
           </Row>
 
+          <Allocation total={basketTotal} paying={paying} methods={methods}
+            onCredit={() => setPaying(p => {
+              const alloc = p.split
+                ? Object.entries(p.split).reduce((s, [k, v]) => k === 'credit' ? s : s + Number(v || 0), 0)
+                : (p.method === 'credit' ? 0 : basketTotal)
+              const split = p.split || Object.fromEntries(methods.map(m =>
+                [m, m === p.method ? String(basketTotal) : '']))
+              return { ...p, split: { ...split, credit: String(Math.max(basketTotal - alloc, 0)) } }
+            })} />
+
           {paying.split && (
             <div className="mt-3 space-y-2">
               {methods.map(m => (
@@ -358,6 +430,46 @@ export default function SalesEntry({ boot }) {
             {busy ? 'Saving…' : 'Save write-off'}
           </button>
         </Sheet>
+      )}
+    </div>
+  )
+}
+
+function Line({ label, value, tone = '' }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-dim">{label}</span>
+      <span className={`tnum ${tone}`}>{naira(value)}</span>
+    </div>
+  )
+}
+
+function Allocation({ total, paying, methods, onCredit }) {
+  const allocated = paying.split
+    ? Object.values(paying.split).reduce((s, v) => s + Number(v || 0), 0)
+    : total
+  const diff = Number((total - allocated).toFixed(2))
+  return (
+    <div className="mt-6 rounded-xl border border-line bg-surface p-4 space-y-1 text-sm">
+      <div className="flex justify-between">
+        <span className="text-dim">Expected</span>
+        <span className="tnum font-bold">{naira(total)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-dim">Allocated</span>
+        <span className="tnum">{naira(allocated)}</span>
+      </div>
+      <div className="flex justify-between pt-1 border-t border-line">
+        <span className="text-dim">Difference</span>
+        <span className={`tnum font-bold ${Math.abs(diff) < 0.005 ? 'text-leaf' : 'text-clay'}`}>
+          {naira(diff)}
+        </span>
+      </div>
+      {diff > 0.005 && methods.includes('credit') && (
+        <button onClick={onCredit}
+          className="mt-3 w-full h-11 rounded-xl border border-amber text-amber font-semibold">
+          Post {naira(diff)} as credit
+        </button>
       )}
     </div>
   )

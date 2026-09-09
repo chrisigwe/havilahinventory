@@ -79,7 +79,7 @@ export default function Store({ boot }) {
   return (
     <div className="px-5">
       <div className="flex gap-2 py-2">
-        {[['receive', 'Receive'], ['disburse', 'Disburse']].map(([k, label]) => (
+        {[['receive', 'Receive (IN)'], ['disburse', 'Issue (OUT)']].map(([k, label]) => (
           <button key={k} onClick={() => { setMode(k); setLines([]) }}
             className={`flex-1 h-12 rounded-xl border font-bold ${mode === k
               ? 'bg-amber text-bg border-amber' : 'border-line text-dim'}`}>
@@ -102,7 +102,7 @@ export default function Store({ boot }) {
 
       {mode === 'disburse' && (
         <div className="mt-4">
-          <div className="text-dim mb-2">Send to</div>
+          <div className="text-dim mb-2">Issue to (required)</div>
           <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
             {departments.map(d => (
               <button key={d.id} onClick={() => setToDept(d.id)}
@@ -117,7 +117,7 @@ export default function Store({ boot }) {
 
       <button onClick={() => setPicking(true)}
         className="mt-4 w-full h-14 rounded-2xl border-2 border-amber text-amber text-lg font-bold">
-        + Add item
+        {mode === 'receive' ? '+ Receive Stock' : '+ Issue To'}
       </button>
 
       <ul className="mt-4 divide-y divide-line/60">
@@ -153,7 +153,7 @@ export default function Store({ boot }) {
           {overdrawn && <p className="text-clay mb-2">More than the store holds — check the count first.</p>}
           <button onClick={save} disabled={busy}
             className="w-full h-16 rounded-2xl bg-amber text-bg text-xl font-bold disabled:opacity-40">
-            {busy ? 'Saving…' : mode === 'receive' ? 'Save delivery' : 'Disburse stock'}
+            {busy ? 'Saving…' : mode === 'receive' ? 'Save delivery' : 'Issue stock'}
           </button>
         </div>
       )}

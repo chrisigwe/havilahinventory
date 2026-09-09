@@ -7,6 +7,7 @@ import Stock from './pages/Stock'
 import Store from './pages/Store'
 import Corrections from './pages/Corrections'
 import Catalog from './pages/Catalog'
+import Variances from './pages/Variances'
 import More from './pages/More'
 import { ToastHost } from './components/Toast'
 import { registerHandlers, flush } from './lib/outbox'
@@ -71,6 +72,7 @@ export default function App() {
         : tab === 'store' ? <Store boot={boot} />
         : tab === 'more' ? <More boot={boot} onGo={setTab} />
         : tab === 'catalog' ? <Catalog boot={boot} onChanged={refresh} />
+        : tab === 'variance' ? <Variances boot={boot} />
         : tab === 'credit' ? <Credit boot={boot} />
         : tab === 'count' ? <Counts boot={boot} />
         : tab === 'fix' ? <Corrections boot={boot} />
