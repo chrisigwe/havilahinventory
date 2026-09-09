@@ -45,10 +45,14 @@ variables → deploy. `netlify.toml` handles the SPA redirect.
   who did it and when. That log is written by database triggers
   (15_audit_log.sql), so corrections made outside the app are recorded
   too. It is append-only: nobody can edit or delete the log itself.
-  Storekeepers have the same Fix tab as managers (18_storekeeper_full_rights.sql),
-  but scoped to their own branch: they can edit and delete their branch's
-  entries and manage its catalog, while manager/gm/admin additionally see
-  and edit both branches.
+  Storekeepers have the same Fix tab as managers (18_storekeeper_full_rights.sql).
+
+## Branch scope
+
+Only GM and admin see both branches (21_branch_scope.sql). Managers,
+store managers, auditors and bar staff are confined to their own branch —
+they keep every capability their role carries, but only within it.
+Someone who works both branches needs one account per branch.
 
 - Credit tab: outstanding balances per customer, a full statement
   (credit taken, payments received, balance) and Record payment for
