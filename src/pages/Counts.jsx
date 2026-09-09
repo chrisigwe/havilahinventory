@@ -1,0 +1,171 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { loadStockMap, loadCounts, loadCountLines, saveCountLine,
+         startCount, submitCount, verifyCount } from '../lib/data'
+
+const AUDITOR = ['auditor', 'gm', 'admin']
+const COUNTER = ['storekeeper', 'manager', 'gm', 'admin']
+
+export default function Counts({ boot }) {
+  const { staff, allLocations, items } = boot
+  const canCount  = COUNTER.includes(staff.role)
+  const canVerify = AUDITOR.includes(staff.role)
+
+  const [counts, setCounts] = useState(null)
+  const [stockMap, setStockMap] = useState({})
+  const [open, setOpen] = useState(null)      // { count, lines }
+  const [busy, setBusy] = useState(false)
+  const [newLoc, setNewLoc] = useState(allLocations[0]?.id)
+
+  const itemById = useMemo(() => Object.fromEntries(items.map(i => [i.id, i])), [items])
+  const locById  = useMemo(() => Object.fromEntries(allLocations.map(l => [l.id, l])), [allLocations])
+
+  const refresh = useCallback(() => {
+    loadCounts(staff.branch_id).then(setCounts).catch(e => alert(e.message))
+    loadStockMap(staff.branch_id).then(setStockMap).catch(console.error)
+  }, [staff.branch_id])
+  useEffect(refresh, [refresh])
+
+  async function begin() {
+    setBusy(true)
+    try {
+      const id = await startCount({ staff, locationId: newLoc, stockMap, items })
+      refresh()
+      const lines = await loadCountLines(id)
+      setOpen({ count: { id, location_id: newLoc, status: 'draft' }, lines })
+    } catch (e) { alert(e.message) }
+    setBusy(false)
+  }
+
+  async function openCount(c) {
+    try { setOpen({ count: c, lines: await loadCountLines(c.id) }) }
+    catch (e) { alert(e.message) }
+  }
+
+  async function setLine(itemId, value) {
+    const qty = value === '' ? null : Number(value)
+    setOpen(o => ({ ...o, lines: o.lines.map(l =>
+      l.stock_item_id === itemId ? { ...l, counted_qty: qty } : l) }))
+    if (qty !== null) { try { await saveCountLine(open.count.id, itemId, qty) } catch (e) { console.error(e) } }
+  }
+
+  async function doSubmit() {
+    setBusy(true)
+    try { await submitCount(open.count.id); setOpen(null); refresh() }
+    catch (e) { alert(e.message) }
+    setBusy(false)
+  }
+
+  async function doVerify() {
+    setBusy(true)
+    try { await verifyCount(open.count.id); setOpen(null); refresh() }
+    catch (e) { alert(e.message) }
+    setBusy(false)
+  }
+
+  if (!counts) return <p className="px-5 text-dim">Loading…</p>
+
+  const statusStyle = { draft: 'text-dim', submitted: 'text-amber', verified: 'text-leaf' }
+
+  return (
+    <div className="px-5">
+      {canCount && (
+        <div className="py-3">
+          <div className="text-dim mb-2">Start a new count</div>
+          <div className="flex gap-2">
+            <select value={newLoc} onChange={e => setNewLoc(e.target.value)}
+              className="flex-1 h-12 px-3 rounded-xl bg-surface border border-line">
+              {allLocations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+            <button onClick={begin} disabled={busy}
+              className="h-12 px-5 rounded-xl bg-amber text-bg font-bold disabled:opacity-40">
+              Start
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ul className="divide-y divide-line/60">
+        {counts.map(c => (
+          <li key={c.id}>
+            <button onClick={() => openCount(c)} className="w-full text-left py-3">
+              <div className="flex items-center gap-3">
+                <span className="flex-1 font-semibold">{locById[c.location_id]?.name || '—'}</span>
+                <span className={`text-sm font-bold ${statusStyle[c.status]}`}>
+                  {c.status === 'draft' ? 'Counting'
+                    : c.status === 'submitted' ? 'Awaiting auditor' : 'Verified'}
+                </span>
+              </div>
+              <div className="text-dim text-sm">{c.count_date}</div>
+            </button>
+          </li>
+        ))}
+        {!counts.length && <li className="py-8 text-center text-dim">No counts yet.</li>}
+      </ul>
+
+      {open && (
+        <div className="fixed inset-0 z-50 bg-bg flex flex-col">
+          <div className="p-5 flex-1 overflow-y-auto">
+            <button onClick={() => setOpen(null)} className="text-dim">Back</button>
+            <h2 className="mt-3 text-2xl font-bold">
+              {locById[open.count.location_id]?.name}
+            </h2>
+            <p className="text-dim">
+              {open.count.status === 'draft' ? 'Enter what is physically there.'
+                : open.count.status === 'submitted' ? 'Submitted — awaiting the auditor.'
+                : 'Verified. Variances were posted as adjustments.'}
+            </p>
+
+            <ul className="mt-4 divide-y divide-line/60">
+              {open.lines
+                .filter(l => Number(l.system_qty) !== 0 || l.counted_qty !== null)
+                .sort((a, b) => (itemById[a.stock_item_id]?.name || '')
+                  .localeCompare(itemById[b.stock_item_id]?.name || ''))
+                .map(l => {
+                  const diff = l.counted_qty === null ? null
+                    : Number(l.counted_qty) - Number(l.system_qty)
+                  return (
+                    <li key={l.stock_item_id} className="py-3 flex items-center gap-3">
+                      <span className="flex-1 min-w-0 truncate">
+                        {itemById[l.stock_item_id]?.name || '—'}
+                      </span>
+                      <span className="tnum text-dim w-12 text-right">{l.system_qty}</span>
+                      {open.count.status === 'draft' ? (
+                        <input type="number" inputMode="numeric"
+                          value={l.counted_qty ?? ''} placeholder="—"
+                          onChange={e => setLine(l.stock_item_id, e.target.value)}
+                          className="h-11 w-20 px-2 rounded-lg bg-surface border border-line tnum text-center" />
+                      ) : (
+                        <span className="tnum w-20 text-center">{l.counted_qty ?? '—'}</span>
+                      )}
+                      <span className={`tnum w-12 text-right ${!diff ? 'text-dim'
+                        : diff > 0 ? 'text-leaf' : 'text-clay'}`}>
+                        {diff === null ? '' : diff > 0 ? `+${diff}` : diff}
+                      </span>
+                    </li>
+                  )
+                })}
+            </ul>
+          </div>
+
+          <div className="p-5 border-t border-line">
+            {open.count.status === 'draft' && canCount && (
+              <button onClick={doSubmit} disabled={busy}
+                className="w-full h-16 rounded-2xl bg-amber text-bg text-xl font-bold disabled:opacity-40">
+                {busy ? 'Submitting…' : 'Submit for verification'}
+              </button>
+            )}
+            {open.count.status === 'submitted' && canVerify && (
+              <button onClick={doVerify} disabled={busy}
+                className="w-full h-16 rounded-2xl bg-leaf text-bg text-xl font-bold disabled:opacity-40">
+                {busy ? 'Verifying…' : 'Verify and post variances'}
+              </button>
+            )}
+            {open.count.status === 'submitted' && !canVerify && (
+              <p className="text-center text-dim">Only an auditor can verify this count.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { naira, lagosToday, tierLabel, methodLabel } from '../lib/format'
-import { loadStockMap, loadPopular, loadToday, saveSale, saveWriteoff } from '../lib/data'
+import { loadStockMap, loadPopular, loadToday, saveSale, saveWriteoff,
+         loadDailySummary, loadCustomers, createCustomer } from '../lib/data'
 import ItemPicker from '../components/ItemPicker'
 
 export default function SalesEntry({ boot }) {
@@ -14,6 +15,8 @@ export default function SalesEntry({ boot }) {
   const [picking, setPicking] = useState(false)
   const [draft, setDraft] = useState(null) // { item, tier, qty, unitPrice, method, split, writeoff }
   const [toast, setToast] = useState(null)
+  const [summary, setSummary] = useState(null)
+  const [customers, setCustomers] = useState([])
   const itemById = useMemo(() => Object.fromEntries(items.map(i => [i.id, i])), [items])
 
   const refresh = useCallback(() => {
@@ -21,6 +24,8 @@ export default function SalesEntry({ boot }) {
     loadStockMap(staff.branch_id).then(setStockMap).catch(console.error)
     loadPopular(staff.branch_id, since).then(setPopular).catch(console.error)
     loadToday(staff.branch_id, date).then(setToday).catch(console.error)
+    loadDailySummary(staff.branch_id, date).then(setSummary).catch(console.error)
+    loadCustomers(staff.branch_id).then(setCustomers).catch(() => setCustomers([]))
   }, [staff.branch_id, date])
   useEffect(refresh, [refresh])
 
@@ -32,15 +37,30 @@ export default function SalesEntry({ boot }) {
   function startDraft(item) {
     setPicking(false)
     setDraft({ item, tier: 'general', qty: 1, unitPrice: priceFor(item, 'general'),
-               method: methods[0], split: null, writeoff: null })
+               method: methods[0], split: null, writeoff: null,
+               customerId: null, newCustomer: '' })
   }
   function setTier(t) {
     setDraft(d => ({ ...d, tier: t, unitPrice: priceFor(d.item, t) }))
   }
 
+  function creditAmount(d) {
+    if (d.split) return Number(d.split.credit || 0)
+    return d.method === 'credit' ? d.qty * d.unitPrice : 0
+  }
+
   async function save() {
     const d = draft
     try {
+      let customerId = d.customerId
+      if (!d.writeoff && creditAmount(d) > 0) {
+        if (!customerId && d.newCustomer.trim()) {
+          const c = await createCustomer(staff.branch_id, d.newCustomer, null)
+          customerId = c.id
+          setCustomers(cs => [...cs, c])
+        }
+        if (!customerId) { alert('Credit sales need a customer name.'); return }
+      }
       if (d.writeoff) {
         await saveWriteoff({ staff, item: d.item, locationId, kind: d.writeoff,
           qty: d.qty, unitValue: d.unitPrice, date })
@@ -51,7 +71,7 @@ export default function SalesEntry({ boot }) {
           ? methods.map(m => ({ method: m, amount: Number(d.split[m] || 0) }))
           : [{ method: d.method, amount: total }]
         await saveSale({ staff, item: d.item, locationId, tier: d.tier,
-          qty: d.qty, unitPrice: d.unitPrice, payments, date })
+          qty: d.qty, unitPrice: d.unitPrice, payments, date, customerId })
         setToast(`Saved · ${d.qty} × ${d.item.name} · ${naira(total)}`)
       }
       setDraft(null); refresh()
@@ -80,9 +100,41 @@ export default function SalesEntry({ boot }) {
 
       <section className="mt-6">
         <div className="flex items-baseline justify-between">
-          <h2 className="text-dim">Today</h2>
+          <div>
+            <h2 className="text-dim">Today</h2>
+            <p className="text-dim text-sm">
+              {new Date(date + 'T12:00:00').toLocaleDateString('en-NG',
+                { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          </div>
           <span className="tnum font-bold text-lg">{naira(todayTotal)}</span>
         </div>
+
+        {summary && (
+          <div className="mt-3 rounded-2xl border border-line bg-surface p-4">
+            <div className="grid grid-cols-3 gap-3">
+              {methods.map(m => (
+                <div key={m}>
+                  <div className="text-dim text-sm">{methodLabel[m] || m}</div>
+                  <div className="tnum font-bold">{naira(summary.byMethod[m] || 0)}</div>
+                </div>
+              ))}
+            </div>
+            {!!summary.nonRevenue.length && (
+              <div className="mt-3 pt-3 border-t border-line">
+                <div className="text-dim text-sm mb-1">Not income — stock out without payment</div>
+                {summary.nonRevenue.map(r => (
+                  <div key={r.kind} className="flex justify-between text-sm">
+                    <span className="text-dim">
+                      {r.kind === 'complimentary' ? 'PR / free' : 'Damaged'}
+                    </span>
+                    <span className="tnum">{r.qty} units{Number(r.value) > 0 && ` · ${naira(r.value)}`}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <ul className="mt-2 divide-y divide-line/60">
           {today.map(r => (
             <li key={r.id} className="py-3 flex items-center gap-3">
@@ -136,6 +188,23 @@ export default function SalesEntry({ boot }) {
                   Split
                 </Chip>
               </Row>
+              {creditAmount(draft) > 0 && (
+                <div className="mt-6">
+                  <div className="text-dim mb-2">Customer (for the credit)</div>
+                  <select value={draft.customerId || ''}
+                    onChange={e => setDraft(d => ({ ...d, customerId: e.target.value || null }))}
+                    className="h-12 w-full px-3 rounded-xl bg-surface border border-line">
+                    <option value="">— new customer —</option>
+                    {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                  {!draft.customerId && (
+                    <input value={draft.newCustomer} placeholder="Customer name"
+                      onChange={e => setDraft(d => ({ ...d, newCustomer: e.target.value }))}
+                      className="mt-2 h-12 w-full px-3 rounded-xl bg-surface border border-line" />
+                  )}
+                </div>
+              )}
+
               {draft.split && (
                 <div className="mt-3 space-y-2">
                   {methods.map(m => (

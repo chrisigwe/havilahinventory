@@ -33,30 +33,30 @@ export default function Store({ boot }) {
   function addLine(item) {
     setPicking(false)
     setLines(l => l.some(x => x.item.id === item.id) ? l
-      : [...l, { item, qty: 1, unitCost: '' }])
+      : [...l, { item, qty: 1 }])
   }
   const setQty = (id, q) => setLines(l => l.map(x => x.item.id === id ? { ...x, qty: Math.max(1, q) } : x))
-  const setCost = (id, c) => setLines(l => l.map(x => x.item.id === id ? { ...x, unitCost: c } : x))
   const drop = (id) => setLines(l => l.filter(x => x.item.id !== id))
 
   async function save() {
     if (!lines.length) return
     setBusy(true)
     try {
+      const dept = departments.find(d => d.id === toDept)
+      const issues = mode === 'disburse' && dept?.consumes_on_issue
       const rows = lines.map(l => ({
         branch_id: staff.branch_id,
         stock_item_id: l.item.id,
-        movement_type: mode === 'receive' ? 'restock' : 'transfer',
+        movement_type: mode === 'receive' ? 'restock' : (issues ? 'issue' : 'transfer'),
         from_location: mode === 'receive' ? null : store.id,
         to_location:   mode === 'receive' ? store.id : toDept,
         qty: l.qty,
-        unit_cost: mode === 'receive' && l.unitCost !== '' ? Number(l.unitCost) : null,
         business_date: date,
         occurred_at: new Date().toISOString(),
         recorded_by: staff.id,
         is_migrated: false,
         note: mode === 'receive' ? 'received into store'
-          : `to ${departments.find(d => d.id === toDept)?.name}`,
+          : `${issues ? 'issued to' : 'to'} ${dept?.name}`,
       }))
       const { error } = await supabase.from('stock_movements').insert(rows)
       if (error) throw error
@@ -86,6 +86,12 @@ export default function Store({ boot }) {
           ? 'Stock arriving from suppliers, into the store.'
           : 'Stock leaving the store for a department.'}
       </p>
+      {mode === 'disburse' && departments.find(d => d.id === toDept)?.consumes_on_issue && (
+        <p className="text-dim text-sm mt-2">
+          {departments.find(d => d.id === toDept)?.name} is a consuming department —
+          this stock is used up on issue, not held as a balance there.
+        </p>
+      )}
 
       {mode === 'disburse' && (
         <div className="mt-4">
@@ -125,13 +131,9 @@ export default function Store({ boot }) {
                   className="h-12 w-20 px-3 rounded-xl bg-surface border border-line tnum text-center" />
                 <button onClick={() => setQty(l.item.id, l.qty + 1)}
                   className="h-12 w-12 rounded-xl bg-surface border border-line text-2xl font-bold">+</button>
-                {mode === 'receive'
-                  ? <input type="number" inputMode="decimal" placeholder="Unit cost"
-                      value={l.unitCost} onChange={e => setCost(l.item.id, e.target.value)}
-                      className="h-12 flex-1 px-3 rounded-xl bg-surface border border-line tnum" />
-                  : <span className={`flex-1 text-right tnum ${short ? 'text-clay' : 'text-dim'}`}>
-                      {avail} in store
-                    </span>}
+                <span className={`flex-1 text-right tnum ${short ? 'text-clay' : 'text-dim'}`}>
+                  {mode === 'receive' ? '' : `${avail} in store`}
+                </span>
               </div>
             </li>
           )

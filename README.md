@@ -50,6 +50,25 @@ variables → deploy. `netlify.toml` handles the SPA redirect.
   entries and manage its catalog, while manager/gm/admin additionally see
   and edit both branches.
 
+- Credit tab: outstanding balances per customer, a full statement
+  (credit taken, payments received, balance) and Record payment for
+  recovery by POS/cash/transfer. Print / PDF uses the browser's print
+  dialog — "Save as PDF" produces the invoice.
+- Count tab: the store manager starts a count for a location, enters
+  physical quantities against what the system says, and submits it.
+  An auditor then verifies, and any variance posts automatically as
+  an adjustment so the ledger matches the shelf. Only an auditor can
+  verify — enforced by verify_stock_count(), not the UI.
+
+## Kitchen, Housekeeping and Others
+
+These are consuming departments (`consumes_on_issue`). Stock disbursed
+to them is expensed on issue: it leaves the store and does not build up
+as a balance there. Consumption stays attributed to the department for
+reporting via `v_consumption`. They are not sales points, so they never
+appear on the Sales screen — kitchen staff can be given their own sales
+point later by flipping `is_sales_point`.
+
 ## Who sees what
 
 `staff_locations` assigns each person their departments (14_staff_locations.sql).

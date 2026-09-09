@@ -74,7 +74,7 @@ export async function loadToday(branchId, date) {
   return data
 }
 
-export async function saveSale({ staff, item, locationId, tier, qty, unitPrice, payments, date }) {
+export async function saveSale({ staff, item, locationId, tier, qty, unitPrice, payments, date, customerId }) {
   const { data: sale, error } = await supabase.from('sales').insert({
     branch_id: staff.branch_id,
     business_date: date,
@@ -82,6 +82,7 @@ export async function saveSale({ staff, item, locationId, tier, qty, unitPrice, 
     stock_item_id: item.id,
     location_id: locationId,
     tier, qty, unit_price: unitPrice,
+    customer_id: customerId || null,
     recorded_by: staff.id,
   }).select('id').single()
   if (error) throw error
@@ -178,4 +179,120 @@ export async function loadAudit(branchId, limit = 100) {
     .limit(limit)
   if (error) throw error
   return data
+}
+
+// ---------- daily money summary ----------
+export async function loadDailySummary(branchId, date) {
+  const [takings, nonRev] = await Promise.all([
+    supabase.from('v_daily_takings').select('method, amount')
+      .eq('branch_id', branchId).eq('business_date', date),
+    supabase.from('v_daily_non_revenue').select('kind, qty, value')
+      .eq('branch_id', branchId).eq('business_date', date),
+  ])
+  if (takings.error) throw takings.error
+  const byMethod = {}
+  for (const r of takings.data) byMethod[r.method] = (byMethod[r.method] || 0) + Number(r.amount)
+  return { byMethod, nonRevenue: nonRev.data || [] }
+}
+
+// ---------- customers & credit ----------
+export async function loadCustomers(branchId) {
+  const { data, error } = await supabase.from('customers')
+    .select('id, name, phone').eq('branch_id', branchId).eq('is_active', true).order('name')
+  if (error) throw error
+  return data
+}
+
+export async function createCustomer(branchId, name, phone) {
+  const { data, error } = await supabase.from('customers')
+    .insert({ branch_id: branchId, name: name.trim(), phone: phone || null })
+    .select('id, name, phone').single()
+  if (error) throw error
+  return data
+}
+
+export async function loadBalances(branchId) {
+  const { data, error } = await supabase.from('v_customer_balances')
+    .select('customer_id, name, phone, credit_taken, repaid, balance')
+    .eq('branch_id', branchId).order('balance', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function loadCustomerLedger(branchId, customerId) {
+  const [sales, repays] = await Promise.all([
+    supabase.from('sales')
+      .select('id, business_date, qty, unit_price, stock_item_id, sale_payments(method, amount)')
+      .eq('branch_id', branchId).eq('customer_id', customerId)
+      .order('business_date', { ascending: false }),
+    supabase.from('credit_repayments')
+      .select('id, paid_on, method, amount, note')
+      .eq('branch_id', branchId).eq('customer_id', customerId)
+      .order('paid_on', { ascending: false }),
+  ])
+  if (sales.error) throw sales.error
+  if (repays.error) throw repays.error
+  const credit = sales.data
+    .map(s => ({ ...s, credit: (s.sale_payments || [])
+      .filter(p => p.method === 'credit')
+      .reduce((a, p) => a + Number(p.amount), 0) }))
+    .filter(s => s.credit > 0)
+  return { credit, repayments: repays.data }
+}
+
+export async function saveRepayment({ staff, customerId, amount, method, paidOn, note }) {
+  const { error } = await supabase.from('credit_repayments').insert({
+    branch_id: staff.branch_id, customer_id: customerId,
+    amount, method, paid_on: paidOn, note: note || null, recorded_by: staff.id,
+  })
+  if (error) throw error
+}
+
+// ---------- stock counts ----------
+export async function startCount({ staff, locationId, stockMap, items }) {
+  const { data: count, error } = await supabase.from('stock_counts').insert({
+    branch_id: staff.branch_id, location_id: locationId,
+    counted_by: staff.id, status: 'draft',
+  }).select('id').single()
+  if (error) throw error
+  const lines = items.map(i => ({
+    count_id: count.id, stock_item_id: i.id,
+    system_qty: stockMap[`${i.id}:${locationId}`] ?? 0, counted_qty: null,
+  }))
+  const { error: e2 } = await supabase.from('stock_count_lines').insert(lines)
+  if (e2) throw e2
+  return count.id
+}
+
+export async function loadCounts(branchId) {
+  const { data, error } = await supabase.from('stock_counts')
+    .select('id, count_date, status, location_id, counted_by, verified_by, submitted_at, verified_at, note')
+    .eq('branch_id', branchId).order('created_at', { ascending: false }).limit(40)
+  if (error) throw error
+  return data
+}
+
+export async function loadCountLines(countId) {
+  const { data, error } = await supabase.from('stock_count_lines')
+    .select('stock_item_id, system_qty, counted_qty').eq('count_id', countId)
+  if (error) throw error
+  return data
+}
+
+export async function saveCountLine(countId, itemId, qty) {
+  const { error } = await supabase.from('stock_count_lines')
+    .update({ counted_qty: qty }).eq('count_id', countId).eq('stock_item_id', itemId)
+  if (error) throw error
+}
+
+export async function submitCount(countId) {
+  const { error } = await supabase.from('stock_counts')
+    .update({ status: 'submitted', submitted_at: new Date().toISOString() })
+    .eq('id', countId)
+  if (error) throw error
+}
+
+export async function verifyCount(countId) {
+  const { error } = await supabase.rpc('verify_stock_count', { p_count: countId })
+  if (error) throw error
 }
