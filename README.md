@@ -204,7 +204,9 @@ paying at OpenBar does not clear a MainBar debt.
 
 Bar staff get More > Corrections showing only entries they themselves
 recorded, from today and yesterday. They can edit quantity, price and
-payment split, or delete. Enforced by `app_owns_recent()` in RLS, so the
-window cannot be widened from the client. They cannot see the change
+payment split — they cannot delete anything (29_staff_no_delete.sql).
+Removing a record is store manager, manager, GM or admin only. The edit
+window is enforced by `app_owns_recent()` in RLS, so it cannot be
+widened from the client. They cannot see the change
 history, and anything they alter is written to it under their name.
 Backdating remains editor-only.
