@@ -83,7 +83,7 @@ export async function loadPopular(branchId) {
 export async function loadToday(branchId, date) {
   const { data, error } = await supabase
     .from('sales')
-    .select('id, stock_item_id, location_id, tier, qty, unit_price, amount, created_at')
+    .select('id, stock_item_id, location_id, tier, qty, unit_price, amount, created_at, receipt_id, business_date')
     .eq('branch_id', branchId).eq('business_date', date)
     .order('created_at', { ascending: false })
   if (error) throw error
@@ -92,7 +92,8 @@ export async function loadToday(branchId, date) {
 
 // Records a basket: one sales row per line, with the basket's payment
 // split allocated across those lines in order.
-export async function saveBasket({ staff, locationId, lines, payments, date, customerId, backdateReason }) {
+export async function saveBasket({ staff, locationId, lines, payments, date, customerId, backdateReason, receiptId }) {
+  const receipt = receiptId || crypto.randomUUID()
   const buckets = payments.filter(p => Number(p.amount) > 0)
     .map(p => ({ method: p.method, left: Number(p.amount) }))
   for (const line of lines) {
@@ -108,6 +109,7 @@ export async function saveBasket({ staff, locationId, lines, payments, date, cus
       unit_price: line.unitPrice,
       customer_id: customerId || null,
       backdate_reason: backdateReason || null,
+      receipt_id: receipt,
       recorded_by: staff.id,
     }).select('id').single()
     if (error) throw error
@@ -128,6 +130,7 @@ export async function saveBasket({ staff, locationId, lines, payments, date, cus
       if (e2) throw e2
     }
   }
+  return receipt
 }
 
 export async function saveSale({ staff, item, locationId, tier, qty, unitPrice, payments, date, customerId }) {
@@ -480,4 +483,41 @@ export async function updateSaleWithPayments(saleId, { qty, unitPrice, payments 
 export async function saveMovements(rows) {
   const { error } = await supabase.from('stock_movements').insert(rows)
   if (error) throw error
+}
+
+
+// ---------- receipts ----------
+export async function loadReceipt(receiptId) {
+  const { data, error } = await supabase.from('sales')
+    .select(`id, business_date, qty, unit_price, tier, stock_item_id, location_id,
+             customer_id, recorded_by, created_at,
+             sale_payments(method, amount),
+             customers(name, phone),
+             stock_items(name),
+             staff:recorded_by(full_name)`)
+    .eq('receipt_id', receiptId)
+    .order('created_at')
+  if (error) throw error
+  return data
+}
+
+// today's baskets, newest first, for reprinting
+export async function loadReceiptsForDate(branchId, date) {
+  const { data, error } = await supabase.from('sales')
+    .select('receipt_id, business_date, qty, unit_price, created_at, customer_id, location_id, customers(name)')
+    .eq('branch_id', branchId).eq('business_date', date)
+    .not('receipt_id', 'is', null)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  const byReceipt = new Map()
+  for (const r of data) {
+    const cur = byReceipt.get(r.receipt_id) || {
+      receipt_id: r.receipt_id, created_at: r.created_at, lines: 0, total: 0,
+      customer: r.customers?.name || null, location_id: r.location_id,
+    }
+    cur.lines += 1
+    cur.total += Number(r.qty) * Number(r.unit_price)
+    byReceipt.set(r.receipt_id, cur)
+  }
+  return [...byReceipt.values()]
 }

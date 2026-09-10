@@ -172,3 +172,17 @@ added later, a typo); `merge_customers(keep, merge[])` folds them
 together, moving sales and repayments to the surviving record.
 
 Catalog editing is GM and admin only, enforced by RLS.
+
+
+## Receipts
+
+Every basket is stamped with a `receipt_id`, so its lines can be pulled
+back together and printed as one document however it was paid — POS,
+cash, credit or a split. The receipt shows department, item, tier, qty,
+unit price and amount, then a payment table naming each method and its
+amount; a credit portion is labelled as outstanding. Customer is optional
+on cash and POS sales (blank prints as "Walk-in") and required for credit.
+
+Reprint from the Sales screen: tap any row under Today, or use "Receipt
+for the last sale" straight after saving. `27_receipts.sql` also groups
+existing app-entered sales into receipts so older sales can be printed.

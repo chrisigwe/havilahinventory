@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { naira, lagosToday, tierLabel, methodLabel } from '../lib/format'
 import { loadStockMap, loadPopular, loadToday, saveBasket, saveWriteoff,
          loadDailySummary, loadCustomers, createCustomer,
-         loadReconciliation, loadOpeningDate, loadBalances } from '../lib/data'
+         loadReconciliation, loadOpeningDate, loadBalances, loadReceipt } from '../lib/data'
 import { enqueue, flush, isConnectionError } from '../lib/outbox'
 import { useToast } from '../components/Toast'
 import ItemPicker from '../components/ItemPicker'
 import CustomerPicker from '../components/CustomerPicker'
+import Receipt from '../components/Receipt'
 
 export default function SalesEntry({ boot }) {
   const { staff, locations, tiers, methods, items } = boot
@@ -32,8 +33,18 @@ export default function SalesEntry({ boot }) {
   const [paying, setPaying] = useState(null)        // payment step
   const [writeoff, setWriteoff] = useState(null)    // separate PR/damage flow
   const [busy, setBusy] = useState(false)
+  const [receipt, setReceipt] = useState(null)
+  const [lastReceiptId, setLastReceiptId] = useState(null)
 
   const itemById = useMemo(() => Object.fromEntries(items.map(i => [i.id, i])), [items])
+  const locById = useMemo(() =>
+    Object.fromEntries((boot.allLocations || locations).map(l => [l.id, l])), [boot, locations])
+
+  async function openReceipt(receiptId) {
+    if (!receiptId) { toast('No receipt for this entry', 'error'); return }
+    try { setReceipt(await loadReceipt(receiptId)) }
+    catch (e) { toast(e.message, 'error') }
+  }
 
   const refresh = useCallback(() => {
     loadStockMap(staff.branch_id).then(setStockMap).catch(() => {})
@@ -121,8 +132,10 @@ export default function SalesEntry({ boot }) {
         payments, backdateReason,
       }
       try {
-        await saveBasket({ staff, locationId, lines: basket, payments, date, customerId, backdateReason })
+        const rid = await saveBasket({ staff, locationId, lines: basket, payments,
+                                       date, customerId, backdateReason })
         toast(`Saved · ${basket.length} item${basket.length > 1 ? 's' : ''} · ${naira(basketTotal)}`, 'success')
+        setLastReceiptId(rid)
       } catch (e) {
         if (!isConnectionError(e)) throw e
         enqueue({ kind: 'basket', payload })
@@ -220,6 +233,13 @@ export default function SalesEntry({ boot }) {
         </ul>
       )}
 
+      {lastReceiptId && (
+        <button onClick={() => openReceipt(lastReceiptId)}
+          className="mt-3 w-full h-12 rounded-xl border border-amber text-amber font-semibold">
+          Receipt for the last sale
+        </button>
+      )}
+
       <section className="mt-6">
         <div className="flex items-baseline justify-between">
           <div>
@@ -275,7 +295,8 @@ export default function SalesEntry({ boot }) {
 
         <ul className="mt-3 divide-y divide-line/60">
           {today.slice(0, 20).map(r => (
-            <li key={r.id} className="py-3 flex items-center gap-3">
+            <li key={r.id} className="py-3 flex items-center gap-3"
+                onClick={() => openReceipt(r.receipt_id)}>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{itemById[r.stock_item_id]?.name || '—'}</div>
                 <div className="text-dim text-sm">
@@ -381,9 +402,12 @@ export default function SalesEntry({ boot }) {
             </div>
           )}
 
-          {creditAmount(paying) > 0 && (
-            <div className="mt-6">
-              <div className="text-dim mb-2">Customer (for the credit)</div>
+          <div className="mt-6">
+            <div className="text-dim mb-2">
+              {creditAmount(paying) > 0
+                ? 'Customer (required for credit)'
+                : 'Customer (optional — for a named receipt)'}
+            </div>
               <CustomerPicker customers={customers} value={paying.customerId}
                 onPick={id => setPaying(p => ({ ...p, customerId: id }))}
                 onCreate={async (name, servedBy) => {
@@ -393,14 +417,18 @@ export default function SalesEntry({ boot }) {
                     setPaying(p => ({ ...p, customerId: c.id }))
                   } catch (e) { toast(e.message, 'error') }
                 }} />
-            </div>
-          )}
+          </div>
 
           <button onClick={commit} disabled={busy}
             className="mt-8 w-full h-16 rounded-2xl bg-amber text-bg text-xl font-bold disabled:opacity-40">
             {busy ? 'Saving…' : 'Save sale'}
           </button>
         </Sheet>
+      )}
+
+      {receipt && (
+        <Receipt lines={receipt} branchName={boot.branchName} locById={locById}
+          onClose={() => setReceipt(null)} />
       )}
 
       {writeoff && (
