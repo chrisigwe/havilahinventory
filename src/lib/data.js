@@ -174,18 +174,21 @@ export async function saveWriteoff({ staff, item, locationId, kind, qty, unitVal
 // ---------- corrections (manager / gm / admin only) ----------
 
 // Recent activity across sales and stock movements, newest first.
-export async function loadActivity(branchId, days = 14) {
-  const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10)
+export async function loadActivity(branchId, days = 14, ownOnlyStaffId = null) {
+  const since = ownOnlyStaffId
+    ? new Date(Date.now() - 1 * 864e5).toISOString().slice(0, 10)
+    : new Date(Date.now() - days * 864e5).toISOString().slice(0, 10)
+  const own = (q) => ownOnlyStaffId ? q.eq('recorded_by', ownOnlyStaffId) : q
   const [sales, moves] = await Promise.all([
-    supabase.from('sales')
+    own(supabase.from('sales')
       .select('id, business_date, stock_item_id, location_id, tier, qty, unit_price, amount, recorded_by, created_at')
       .eq('branch_id', branchId).gte('business_date', since)
-      .order('created_at', { ascending: false }).limit(300),
-    supabase.from('stock_movements')
+      .order('created_at', { ascending: false }).limit(300)),
+    own(supabase.from('stock_movements')
       .select('id, business_date, stock_item_id, movement_type, from_location, to_location, qty, unit_cost, note, recorded_by, created_at')
       .eq('branch_id', branchId).gte('business_date', since)
       .is('reference_id', null)          // sale deductions are shown as their sale
-      .order('created_at', { ascending: false }).limit(300),
+      .order('created_at', { ascending: false }).limit(300)),
   ])
   if (sales.error) throw sales.error
   if (moves.error) throw moves.error
@@ -332,24 +335,27 @@ function normalizeName(s) {
     .replace(/\s+/g, ' ').trim()
 }
 
-export async function loadBalances(branchId) {
-  const { data, error } = await supabase.from('v_customer_balances')
-    .select('customer_id, name, phone, credit_taken, repaid, balance')
-    .eq('branch_id', branchId).order('balance', { ascending: false })
+export async function loadBalances(branchId, locationId) {
+  let q = supabase.from('v_customer_balances_by_location')
+    .select('customer_id, location_id, name, phone, served_by, credit_taken, repaid, balance')
+    .eq('branch_id', branchId)
+  if (locationId) q = q.eq('location_id', locationId)
+  const { data, error } = await q.order('balance', { ascending: false })
   if (error) throw error
   return data
 }
 
-export async function loadCustomerLedger(branchId, customerId) {
+export async function loadCustomerLedger(branchId, customerId, locationId) {
+  let sq = supabase.from('sales')
+    .select('id, business_date, qty, unit_price, stock_item_id, location_id, tier, sale_payments(method, amount)')
+    .eq('branch_id', branchId).eq('customer_id', customerId)
+  let rq = supabase.from('credit_repayments')
+    .select('id, paid_on, method, amount, note, location_id')
+    .eq('branch_id', branchId).eq('customer_id', customerId)
+  if (locationId) { sq = sq.eq('location_id', locationId); rq = rq.eq('location_id', locationId) }
   const [sales, repays] = await Promise.all([
-    supabase.from('sales')
-      .select('id, business_date, qty, unit_price, stock_item_id, location_id, tier, sale_payments(method, amount)')
-      .eq('branch_id', branchId).eq('customer_id', customerId)
-      .order('business_date', { ascending: false }),
-    supabase.from('credit_repayments')
-      .select('id, paid_on, method, amount, note')
-      .eq('branch_id', branchId).eq('customer_id', customerId)
-      .order('paid_on', { ascending: false }),
+    sq.order('business_date', { ascending: false }),
+    rq.order('paid_on', { ascending: false }),
   ])
   if (sales.error) throw sales.error
   if (repays.error) throw repays.error
@@ -361,9 +367,9 @@ export async function loadCustomerLedger(branchId, customerId) {
   return { credit, repayments: repays.data }
 }
 
-export async function saveRepayment({ staff, customerId, amount, method, paidOn, note }) {
+export async function saveRepayment({ staff, customerId, amount, method, paidOn, note, locationId }) {
   const { error } = await supabase.from('credit_repayments').insert({
-    branch_id: staff.branch_id, customer_id: customerId,
+    branch_id: staff.branch_id, customer_id: customerId, location_id: locationId || null,
     amount, method, paid_on: paidOn, note: note || null, recorded_by: staff.id,
   })
   if (error) throw error

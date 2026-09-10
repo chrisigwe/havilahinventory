@@ -7,7 +7,9 @@ import { useToast } from '../components/Toast'
 export default function Corrections({ boot }) {
   const { staff, allLocations, items, methods } = boot
   const toast = useToast()
-  const canEdit = ['storekeeper', 'manager', 'gm', 'admin'].includes(staff.role)
+  const isEditor = ['storekeeper', 'manager', 'gm', 'admin'].includes(staff.role)
+  const canEdit = isEditor || staff.role === 'bar'
+  const ownOnly = !isEditor
   const [rows, setRows] = useState(null)
   const [view, setView] = useState(canEdit ? 'entries' : 'history')
   const [audit, setAudit] = useState(null)
@@ -19,9 +21,12 @@ export default function Corrections({ boot }) {
   const locById  = useMemo(() => Object.fromEntries(allLocations.map(l => [l.id, l])), [allLocations])
 
   const refresh = useCallback(() => {
-    if (canEdit) loadActivity(staff.branch_id).then(setRows).catch(e => toast(e.message, 'error'))
-    loadAudit(staff.branch_id).then(setAudit).catch(() => setAudit([]))
-  }, [staff.branch_id, canEdit])
+    if (canEdit) {
+      loadActivity(staff.branch_id, 14, ownOnly ? staff.id : null)
+        .then(setRows).catch(e => toast(e.message, 'error'))
+    }
+    if (!ownOnly) loadAudit(staff.branch_id).then(setAudit).catch(() => setAudit([]))
+  }, [staff.branch_id, canEdit, ownOnly, staff.id])
   useEffect(refresh, [refresh])
 
   function describe(r) {
@@ -89,7 +94,7 @@ export default function Corrections({ boot }) {
 
   return (
     <div className="px-5">
-      {canEdit && <div className="flex gap-2 py-2">
+      {canEdit && !ownOnly && <div className="flex gap-2 py-2">
         {[['entries', 'Entries'], ['history', 'Change history']].map(([k, label]) => (
           <button key={k} onClick={() => setView(k)}
             className={`flex-1 h-12 rounded-xl border font-bold ${view === k
@@ -131,7 +136,9 @@ export default function Corrections({ boot }) {
       ) : (
       <>
       <p className="text-dim text-sm pb-2">
-        Last 14 days. Deleting a sale also reverses its stock deduction.
+        {ownOnly
+          ? 'Your own entries from today and yesterday. Deleting a sale returns the stock.'
+          : 'Last 14 days. Deleting a sale also reverses its stock deduction.'}
       </p>
       <ul className="divide-y divide-line/60">
         {rows.map(r => {

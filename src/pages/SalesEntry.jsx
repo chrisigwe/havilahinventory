@@ -53,7 +53,7 @@ export default function SalesEntry({ boot }) {
     loadDailySummary(staff.branch_id, date).then(setSummary).catch(() => {})
     loadReconciliation(staff.branch_id, date, locationId).then(setRecon).catch(() => {})
     loadOpeningDate(staff.branch_id).then(setOpeningDate).catch(() => {})
-    Promise.all([loadCustomers(staff.branch_id), loadBalances(staff.branch_id).catch(() => [])])
+    Promise.all([loadCustomers(staff.branch_id), loadBalances(staff.branch_id, locationId).catch(() => [])])
       .then(([cs, bals]) => {
         const byId = Object.fromEntries(bals.map(b => [b.customer_id, Number(b.balance)]))
         setCustomers(cs.map(c => ({ ...c, balance: byId[c.id] || 0 })))

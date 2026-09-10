@@ -7,8 +7,8 @@ const ITEMS = [
     roles: ['gm', 'admin'] },
   { key: 'variance', label: 'Variances', hint: 'Sales where collection did not match the goods sold',
     roles: ['storekeeper', 'manager', 'gm', 'admin'] },
-  { key: 'fix',     label: 'Corrections', hint: 'Edit or delete entries, and change history',
-    roles: ['storekeeper', 'manager', 'gm', 'admin'] },
+  { key: 'fix',     label: 'Corrections', hint: 'Fix a mistake from today or yesterday',
+    roles: ['bar', 'storekeeper', 'manager', 'gm', 'admin'] },
 ]
 
 export default function More({ boot, onGo }) {

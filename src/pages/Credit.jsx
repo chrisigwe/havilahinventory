@@ -4,7 +4,9 @@ import { naira, lagosToday, methodLabel, tierLabel } from '../lib/format'
 import { loadBalances, loadCustomerLedger, saveRepayment } from '../lib/data'
 
 export default function Credit({ boot }) {
-  const { staff, items, methods, allLocations } = boot
+  const { staff, items, methods, allLocations, locations } = boot
+  const salesPoints = (locations || []).filter(l => l.is_sales_point && !l.is_store)
+  const [locId, setLocId] = useState(staff.default_location_id || salesPoints[0]?.id || null)
   const [rows, setRows] = useState(null)
   const toast = useToast()
   const [open, setOpen] = useState(null)       // { customer, ledger }
@@ -14,13 +16,13 @@ export default function Credit({ boot }) {
   const locById = useMemo(() => Object.fromEntries((allLocations || []).map(l => [l.id, l])), [allLocations])
 
   const refresh = useCallback(() => {
-    loadBalances(staff.branch_id).then(setRows).catch(e => toast(e.message, 'error'))
-  }, [staff.branch_id])
+    loadBalances(staff.branch_id, locId).then(setRows).catch(e => toast(e.message, 'error'))
+  }, [staff.branch_id, locId])
   useEffect(refresh, [refresh])
 
   async function openCustomer(c) {
     try {
-      const ledger = await loadCustomerLedger(staff.branch_id, c.customer_id)
+      const ledger = await loadCustomerLedger(staff.branch_id, c.customer_id, locId)
       setOpen({ customer: c, ledger })
     } catch (e) { toast(e.message, 'error') }
   }
@@ -43,8 +45,22 @@ export default function Credit({ boot }) {
 
   return (
     <div className="px-5">
+      {salesPoints.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto py-2 -mx-1 px-1">
+          {salesPoints.map(l => (
+            <button key={l.id} onClick={() => setLocId(l.id)}
+              className={`shrink-0 h-11 px-4 rounded-full border ${l.id === locId
+                ? 'bg-amber text-bg border-amber font-bold' : 'border-line text-dim'}`}>
+              {l.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-baseline justify-between py-2">
-        <h2 className="text-dim">Outstanding credit</h2>
+        <h2 className="text-dim">
+          Owed to {locById[locId]?.name || 'this department'}
+        </h2>
         <span className="tnum font-bold text-lg text-clay">{naira(total)}</span>
       </div>
 
@@ -74,7 +90,9 @@ export default function Credit({ boot }) {
               {/* letterhead */}
               <div className="invoice-head">
                 <h1 className="text-2xl font-bold">Havilah Suite Ltd</h1>
-                <p className="text-dim">{boot.branchName || ''} · Statement of Account</p>
+                <p className="text-dim">
+                  {boot.branchName || ''}{locById[locId]?.name ? ` · ${locById[locId].name}` : ''} · Statement of Account
+                </p>
               </div>
 
               <div className="invoice-meta mt-5">
