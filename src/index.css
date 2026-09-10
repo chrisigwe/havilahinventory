@@ -19,16 +19,24 @@ body { color: var(--color-ink); font-family: var(--font-sans); -webkit-tap-highl
 .tnum { font-variant-numeric: tabular-nums; }
 input, button { font: inherit; }
 
-/* Native date inputs render their calendar glyph dark, which is
-   invisible on this theme. color-scheme fixes the picker panel;
-   the filter makes the icon itself legible. */
+/* The browser's own calendar glyph is dark and unreadable on this
+   theme, and inverting it is unreliable across versions. Replace it
+   with our own white icon instead. */
 input[type="date"] { color-scheme: dark; }
 input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1) brightness(1.6);
-  opacity: 0.9;
+  background-image: url("data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>");
+  background-size: 20px 20px;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: none;
+  opacity: 1;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin-left: 4px;
   cursor: pointer;
 }
-input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 0.75; }
 *:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
