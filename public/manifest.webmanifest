@@ -1,0 +1,12 @@
+{
+  "name": "Havilah Inventory",
+  "short_name": "Havilah",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#101613",
+  "theme_color": "#101613",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
