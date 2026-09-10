@@ -18,6 +18,17 @@ html { background: var(--color-bg); }
 body { color: var(--color-ink); font-family: var(--font-sans); -webkit-tap-highlight-color: transparent; }
 .tnum { font-variant-numeric: tabular-nums; }
 input, button { font: inherit; }
+
+/* Native date inputs render their calendar glyph dark, which is
+   invisible on this theme. color-scheme fixes the picker panel;
+   the filter makes the icon itself legible. */
+input[type="date"] { color-scheme: dark; }
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.6);
+  opacity: 0.9;
+  cursor: pointer;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 *:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
