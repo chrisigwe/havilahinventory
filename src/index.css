@@ -21,9 +21,45 @@ input, button { font: inherit; }
 *:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
+/* ---------- invoice ---------- */
+.invoice-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+.invoice-table th, .invoice-table td {
+  text-align: left; padding: 0.5rem 0.4rem; border-bottom: 1px solid var(--color-line);
+  vertical-align: top;
+}
+.invoice-table th { color: var(--color-dim); font-weight: 600; font-size: 0.8rem;
+  text-transform: uppercase; letter-spacing: 0.04em; }
+.invoice-table .num { text-align: right; white-space: nowrap; }
+.invoice-table tfoot td { border-bottom: none; border-top: 2px solid var(--color-line); }
+.invoice-head { border-bottom: 2px solid var(--color-amber); padding-bottom: 0.75rem; }
+.invoice-meta { display: flex; justify-content: space-between; gap: 1rem; }
+.invoice-balance {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 1.25rem; font-weight: 700;
+  border-top: 2px solid var(--color-amber); padding-top: 0.75rem;
+}
+
 @media print {
-  body { background: #fff !important; color: #000 !important; }
-  nav, header, .print\:hidden { display: none !important; }
-  #invoice-area { position: static !important; overflow: visible !important; }
-  #invoice-area * { color: #000 !important; border-color: #bbb !important; }
+  @page { size: A4; margin: 14mm; }
+
+  html, body { background: #fff !important; }
+  body * { visibility: hidden; }
+  #invoice-area, #invoice-area * { visibility: visible; }
+  #invoice-area {
+    position: absolute; inset: 0 auto auto 0; width: 100%;
+    padding: 0 !important; color: #000 !important; background: #fff !important;
+    font-size: 11pt;
+  }
+  #invoice-area * { color: #000 !important; }
+  #invoice-area .text-dim { color: #555 !important; }
+
+  .invoice-head { border-bottom: 2px solid #000 !important; }
+  .invoice-balance { border-top: 2px solid #000 !important; }
+  .invoice-table th, .invoice-table td { border-bottom: 1px solid #bbb !important; }
+  .invoice-table thead { background: #eee !important; -webkit-print-color-adjust: exact; }
+  .invoice-table tfoot td { border-top: 2px solid #000 !important; }
+  .invoice-table tr { page-break-inside: avoid; }
+  .invoice-foot { border-top: 1px solid #ccc; padding-top: 6pt; }
+
+  nav, header, button, .print\:hidden { display: none !important; }
 }

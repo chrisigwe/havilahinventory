@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useToast } from '../components/Toast'
-import { naira, lagosToday, methodLabel } from '../lib/format'
+import { naira, lagosToday, methodLabel, tierLabel } from '../lib/format'
 import { loadBalances, loadCustomerLedger, saveRepayment } from '../lib/data'
 
 export default function Credit({ boot }) {
-  const { staff, items, methods } = boot
+  const { staff, items, methods, allLocations } = boot
   const [rows, setRows] = useState(null)
   const toast = useToast()
   const [open, setOpen] = useState(null)       // { customer, ledger }
   const [pay, setPay] = useState(null)
   const [busy, setBusy] = useState(false)
   const itemById = useMemo(() => Object.fromEntries(items.map(i => [i.id, i])), [items])
+  const locById = useMemo(() => Object.fromEntries((allLocations || []).map(l => [l.id, l])), [allLocations])
 
   const refresh = useCallback(() => {
     loadBalances(staff.branch_id).then(setRows).catch(e => toast(e.message, 'error'))
@@ -64,47 +65,104 @@ export default function Credit({ boot }) {
 
       {open && (
         <div className="fixed inset-0 z-50 bg-bg flex flex-col">
-          <div className="p-5 flex-1 overflow-y-auto" id="invoice-area">
-            <button onClick={() => setOpen(null)} className="text-dim print:hidden">Back</button>
-
-            <div className="mt-3">
-              <h2 className="text-2xl font-bold">{open.customer.name}</h2>
-              {open.customer.phone && <p className="text-dim">{open.customer.phone}</p>}
-              <p className="text-dim text-sm mt-1">
-                Statement as at {new Date().toLocaleDateString('en-NG',
-                  { day: 'numeric', month: 'long', year: 'numeric' })}
-              </p>
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-5 print:hidden">
+              <button onClick={() => setOpen(null)} className="text-dim">Back</button>
             </div>
 
-            <h3 className="mt-6 text-dim">Credit taken</h3>
-            <ul className="mt-1 divide-y divide-line/60">
-              {open.ledger.credit.map(s => (
-                <li key={s.id} className="py-2 flex items-center gap-3">
-                  <span className="tnum text-dim text-sm w-16">{s.business_date?.slice(5)}</span>
-                  <span className="flex-1 min-w-0 truncate">
-                    {itemById[s.stock_item_id]?.name || '—'} × {s.qty}
-                  </span>
-                  <span className="tnum">{naira(s.credit)}</span>
-                </li>
-              ))}
-              {!open.ledger.credit.length && <li className="py-2 text-dim">None recorded.</li>}
-            </ul>
+            <div id="invoice-area" className="px-5 pb-6">
+              {/* letterhead */}
+              <div className="invoice-head">
+                <h1 className="text-2xl font-bold">Havilah Suite Ltd</h1>
+                <p className="text-dim">{boot.branchName || ''} · Statement of Account</p>
+              </div>
 
-            <h3 className="mt-6 text-dim">Payments received</h3>
-            <ul className="mt-1 divide-y divide-line/60">
-              {open.ledger.repayments.map(r => (
-                <li key={r.id} className="py-2 flex items-center gap-3">
-                  <span className="tnum text-dim text-sm w-16">{r.paid_on?.slice(5)}</span>
-                  <span className="flex-1 text-dim">{methodLabel[r.method] || r.method}</span>
-                  <span className="tnum text-leaf">{naira(r.amount)}</span>
-                </li>
-              ))}
-              {!open.ledger.repayments.length && <li className="py-2 text-dim">None yet.</li>}
-            </ul>
+              <div className="invoice-meta mt-5">
+                <div>
+                  <div className="text-dim text-sm">Customer</div>
+                  <div className="text-xl font-bold">{open.customer.name}</div>
+                  {open.customer.phone && <div className="text-dim text-sm">{open.customer.phone}</div>}
+                </div>
+                <div className="text-right">
+                  <div className="text-dim text-sm">Date</div>
+                  <div className="tnum">
+                    {new Date().toLocaleDateString('en-NG',
+                      { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </div>
+                </div>
+              </div>
 
-            <div className="mt-6 pt-3 border-t border-line flex items-baseline justify-between">
-              <span className="font-bold text-lg">Balance owing</span>
-              <span className="tnum font-bold text-lg">{naira(open.customer.balance)}</span>
+              <h3 className="mt-6 mb-2 font-bold">Goods taken on credit</h3>
+              <table className="invoice-table">
+                <thead>
+                  <tr>
+                    <th>Date</th><th>Department</th><th>Item</th>
+                    <th className="num">Qty</th><th className="num">Unit</th><th className="num">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {open.ledger.credit.map(s2 => (
+                    <tr key={s2.id}>
+                      <td className="tnum">{s2.business_date?.slice(5)}</td>
+                      <td>{locById[s2.location_id]?.name || '—'}</td>
+                      <td>
+                        {itemById[s2.stock_item_id]?.name || '—'}
+                        {s2.tier && s2.tier !== 'general' && (
+                          <span className="text-dim"> ({tierLabel[s2.tier] || s2.tier})</span>
+                        )}
+                      </td>
+                      <td className="num tnum">{s2.qty}</td>
+                      <td className="num tnum">{naira(s2.unit_price)}</td>
+                      <td className="num tnum">{naira(s2.credit)}</td>
+                    </tr>
+                  ))}
+                  {!open.ledger.credit.length && (
+                    <tr><td colSpan="6" className="text-dim">None recorded.</td></tr>
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan="5" className="num font-bold">Total credit</td>
+                    <td className="num tnum font-bold">{naira(open.customer.credit_taken)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+
+              <h3 className="mt-6 mb-2 font-bold">Payments received</h3>
+              <table className="invoice-table">
+                <thead>
+                  <tr><th>Date</th><th>Method</th><th>Note</th><th className="num">Amount</th></tr>
+                </thead>
+                <tbody>
+                  {open.ledger.repayments.map(r => (
+                    <tr key={r.id}>
+                      <td className="tnum">{r.paid_on?.slice(5)}</td>
+                      <td>{methodLabel[r.method] || r.method}</td>
+                      <td className="text-dim">{r.note || ''}</td>
+                      <td className="num tnum">{naira(r.amount)}</td>
+                    </tr>
+                  ))}
+                  {!open.ledger.repayments.length && (
+                    <tr><td colSpan="4" className="text-dim">None yet.</td></tr>
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan="3" className="num font-bold">Total paid</td>
+                    <td className="num tnum font-bold">{naira(open.customer.repaid)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+
+              <div className="invoice-balance mt-6">
+                <span>Balance owing</span>
+                <span className="tnum">{naira(open.customer.balance)}</span>
+              </div>
+
+              <p className="text-dim text-sm mt-6 invoice-foot">
+                Prepared from the Havilah inventory system. Please settle at the front desk
+                or with the store manager.
+              </p>
             </div>
           </div>
 

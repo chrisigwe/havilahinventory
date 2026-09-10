@@ -22,12 +22,13 @@ export async function loadBootstrap(viewBranchId) {
   if (!staff) return { staff: null }
   const seesAllBranches = ['gm', 'admin'].includes(staff.role)
   const b = (seesAllBranches && viewBranchId) ? viewBranchId : staff.branch_id
-  const [locs, tiers, methods, items, assigned] = await Promise.all([
+  const [locs, tiers, methods, items, assigned, branchRow] = await Promise.all([
     supabase.from('stock_locations').select('*').eq('branch_id', b).order('sort_order'),
     supabase.from('branch_price_tiers').select('tier').eq('branch_id', b),
     supabase.from('branch_payment_methods').select('method').eq('branch_id', b),
     supabase.from('stock_items').select('*').eq('branch_id', b).eq('is_active', true).order('name'),
     supabase.from('staff_locations').select('location_id').eq('staff_id', staff.id),
+    supabase.from('branches').select('name, slug').eq('id', b).maybeSingle(),
   ])
   for (const r of [locs, tiers, methods, items]) if (r.error) throw r.error
 
@@ -46,6 +47,7 @@ export async function loadBootstrap(viewBranchId) {
     // being viewed; realBranchId keeps the person's home branch
     staff: { ...staff, branch_id: b, realBranchId: staff.branch_id },
     seesAllBranches,
+    branchName: branchRow?.data?.name || '',
     viewBranchId: b,
     seesAll,
     allLocations: locs.data,
@@ -338,7 +340,7 @@ export async function loadBalances(branchId) {
 export async function loadCustomerLedger(branchId, customerId) {
   const [sales, repays] = await Promise.all([
     supabase.from('sales')
-      .select('id, business_date, qty, unit_price, stock_item_id, sale_payments(method, amount)')
+      .select('id, business_date, qty, unit_price, stock_item_id, location_id, tier, sale_payments(method, amount)')
       .eq('branch_id', branchId).eq('customer_id', customerId)
       .order('business_date', { ascending: false }),
     supabase.from('credit_repayments')
