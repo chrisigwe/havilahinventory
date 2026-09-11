@@ -1,5 +1,13 @@
 import { naira, tierLabel, methodLabel } from '../lib/format'
 
+function printOnly(id) {
+  document.querySelectorAll('.invoice-print').forEach(el => {
+    el.style.display = el.id === id ? '' : 'none'
+  })
+  window.print()
+  document.querySelectorAll('.invoice-print').forEach(el => { el.style.display = '' })
+}
+
 export default function Receipt({ lines, branchName, locById, onClose, onPrint }) {
   if (!lines?.length) return null
 
@@ -22,7 +30,7 @@ export default function Receipt({ lines, branchName, locById, onClose, onPrint }
           <button onClick={onClose} className="text-dim">Back</button>
         </div>
 
-        <div id="invoice-area" className="px-5 pb-6">
+        <div id="receipt-area" className="invoice-print px-5 pb-6">
           <div className="invoice-head">
             <h1 className="text-2xl font-bold">Havilah Suite Ltd</h1>
             <p className="text-dim">{branchName} · Sales Receipt</p>
@@ -132,7 +140,7 @@ export default function Receipt({ lines, branchName, locById, onClose, onPrint }
         <button onClick={onClose} className="flex-1 h-14 rounded-2xl border border-line font-bold">
           Close
         </button>
-        <button onClick={onPrint || (() => window.print())}
+        <button onClick={onPrint || (() => printOnly('receipt-area'))}
           className="flex-1 h-14 rounded-2xl bg-amber text-bg font-bold">Print / PDF</button>
       </div>
     </div>

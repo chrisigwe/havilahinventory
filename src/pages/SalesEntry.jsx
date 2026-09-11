@@ -75,7 +75,11 @@ export default function SalesEntry({ boot }) {
     if (canOverrideVariance && !people.length) {
       loadBarStaff(staff.branch_id).then(ps => setPeople(ps.filter(p => p.role === 'bar')))
     }
-    Promise.all([loadCustomers(staff.branch_id), loadBalances(staff.branch_id, locationId).catch(() => [])])
+    const wantsBalances = methods.includes('credit')
+    Promise.all([
+      loadCustomers(staff.branch_id),
+      wantsBalances ? loadBalances(staff.branch_id, locationId).catch(() => []) : Promise.resolve([]),
+    ])
       .then(([cs, bals]) => {
         const byId = Object.fromEntries(bals.map(b => [b.customer_id, Number(b.balance)]))
         setCustomers(cs.map(c => ({ ...c, balance: byId[c.id] || 0 })))
@@ -95,19 +99,21 @@ export default function SalesEntry({ boot }) {
   function addToBasket(item) {
     setPicking(false)
     setBasket(b => {
-      const at = b.findIndex(l => l.item.id === item.id && l.tier === defaultTier)
+      const at = b.findIndex(l => l.item.id === item.id && l.tier === defaultTier && !l.priceOverridden)
       if (at >= 0) {
         const copy = [...b]; copy[at] = { ...copy[at], qty: copy[at].qty + 1 }; return copy
       }
       return [...b, { key: crypto.randomUUID(), item, tier: defaultTier, qty: 1,
-                      unitPrice: priceFor(item, defaultTier) }]
+                      unitPrice: priceFor(item, defaultTier), priceOverridden: false }]
     })
   }
 
-  // switching the basket tier reprices everything already in it
+  // switching the basket tier reprices everything already in it, EXCEPT
+  // lines someone has hand-priced — those stay as entered
   function switchTier(t) {
     setDefaultTier(t)
-    setBasket(b => b.map(l => ({ ...l, tier: t, unitPrice: priceFor(l.item, t) })))
+    setBasket(b => b.map(l => l.priceOverridden ? l
+      : { ...l, tier: t, unitPrice: priceFor(l.item, t) }))
   }
   const patchLine = (key, patch) =>
     setBasket(b => b.map(l => l.key === key ? { ...l, ...patch } : l))
@@ -180,11 +186,12 @@ export default function SalesEntry({ boot }) {
     setBusy(true)
     const w = writeoff
     try {
+      const wDate = w.date || date
       const payload = { staffLite: { id: staff.id, branch_id: staff.branch_id },
-        itemId: w.item.id, locationId, kind: w.kind, qty: w.qty, unitValue: w.unitValue, date }
+        itemId: w.item.id, locationId, kind: w.kind, qty: w.qty, unitValue: w.unitValue, date: wDate }
       try {
         await saveWriteoff({ staff, item: w.item, locationId, kind: w.kind,
-          qty: w.qty, unitValue: w.unitValue, date })
+          qty: w.qty, unitValue: w.unitValue, date: wDate })
         toast(`${w.qty} × ${w.item.name} recorded as ${w.kind === 'damage' ? 'damaged' : 'PR'}`, 'success')
       } catch (e) {
         if (!isConnectionError(e)) throw e
@@ -429,9 +436,7 @@ export default function SalesEntry({ boot }) {
               setWriteoff({ item, kind: 'damage', qty: 1, unitValue: Number(item.selling_price) })
             } else addToBasket(item)
           }}
-          onClose={() => { setPicking(false); setWriteoffMode(false) }}
-          onWriteoff={(item) => { setPicking(false)
-            setWriteoff({ item, kind: 'damage', qty: 1, unitValue: Number(item.selling_price) }) }} />
+          onClose={() => { setPicking(false); setWriteoffMode(false) }} />
       )}
 
       {tuning && (() => {
@@ -443,15 +448,19 @@ export default function SalesEntry({ boot }) {
             <Row label="Price tier">
               {tiers.map(t => (
                 <Chip key={t} active={l.tier === t}
-                  onClick={() => patchLine(l.key, { tier: t, unitPrice: priceFor(l.item, t) })}>
+                  onClick={() => patchLine(l.key, { tier: t, unitPrice: priceFor(l.item, t), priceOverridden: false })}>
                   {tierLabel[t] || t}
                 </Chip>
               ))}
             </Row>
             <Row label="Unit price">
               <input type="number" inputMode="decimal" value={l.unitPrice}
-                onChange={e => patchLine(l.key, { unitPrice: Number(e.target.value) })}
+                onChange={e => patchLine(l.key, { unitPrice: Number(e.target.value), priceOverridden: true })}
                 className="h-12 w-36 px-3 rounded-xl bg-surface border border-line tnum" />
+              {l.priceOverridden && (
+                <button onClick={() => patchLine(l.key, { unitPrice: priceFor(l.item, l.tier), priceOverridden: false })}
+                  className="text-dim text-sm underline">Reset to {tierLabel[l.tier] || l.tier} price</button>
+              )}
             </Row>
             <button onClick={() => { dropLine(l.key); setTuning(null) }}
               className="mt-8 w-full h-12 rounded-xl border border-clay text-clay font-semibold">
@@ -557,6 +566,11 @@ export default function SalesEntry({ boot }) {
             <input type="number" inputMode="decimal" value={writeoff.unitValue}
               onChange={e => setWriteoff(w => ({ ...w, unitValue: Number(e.target.value) }))}
               className="h-12 w-36 px-3 rounded-xl bg-surface border border-line tnum" />
+          </Row>
+          <Row label="Date">
+            <input type="date" value={writeoff.date || date} max={todayDate}
+              onChange={e => setWriteoff(w => ({ ...w, date: e.target.value }))}
+              className="h-12 px-3 rounded-xl bg-surface border border-line tnum" />
           </Row>
           <button onClick={commitWriteoff} disabled={busy}
             className="mt-8 w-full h-16 rounded-2xl bg-amber text-bg text-xl font-bold disabled:opacity-40">

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadStockMap, loadCounts, loadCountLines, saveCountLine,
-         startCount, startCountOfType, submitCount, verifyCount, deleteCount,
+         startCountOfType, submitCount, verifyCount, deleteCount,
          postOpeningBalance } from '../lib/data'
 import { lagosToday } from '../lib/format'
 import { useToast } from '../components/Toast'

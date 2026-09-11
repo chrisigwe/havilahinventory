@@ -3,6 +3,14 @@ import { useToast } from '../components/Toast'
 import { naira, lagosToday, methodLabel, tierLabel } from '../lib/format'
 import { loadBalances, loadCustomerLedger, saveRepayment, loadBarStaff } from '../lib/data'
 
+function printStatement() {
+  document.querySelectorAll('.invoice-print').forEach(el => {
+    el.style.display = el.id === 'statement-area' ? '' : 'none'
+  })
+  window.print()
+  document.querySelectorAll('.invoice-print').forEach(el => { el.style.display = '' })
+}
+
 export default function Credit({ boot }) {
   const { staff, items, methods, allLocations, locations } = boot
   const salesPoints = (locations || []).filter(l => l.is_sales_point && !l.is_store)
@@ -121,7 +129,7 @@ export default function Credit({ boot }) {
               <button onClick={() => setOpen(null)} className="text-dim">Back</button>
             </div>
 
-            <div id="invoice-area" className="px-5 pb-6">
+            <div id="statement-area" className="invoice-print px-5 pb-6">
               {/* letterhead */}
               <div className="invoice-head">
                 <h1 className="text-2xl font-bold">Havilah Suite Ltd</h1>
@@ -220,7 +228,7 @@ export default function Credit({ boot }) {
           </div>
 
           <div className="p-5 border-t border-line flex gap-3 print:hidden">
-            <button onClick={() => window.print()}
+            <button onClick={() => printStatement()}
               className="flex-1 h-14 rounded-2xl border border-line font-bold">Print / PDF</button>
             <button onClick={() => setPay({ customerId: open.customer.customer_id,
               amount: open.customer.balance, method: methods.find(m => m !== 'credit') || 'cash',

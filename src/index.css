@@ -63,14 +63,14 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 0.75; }
 
   html, body { background: #fff !important; }
   body * { visibility: hidden; }
-  #invoice-area, #invoice-area * { visibility: visible; }
-  #invoice-area {
+  .invoice-print, .invoice-print * { visibility: visible; }
+  .invoice-print {
     position: absolute; inset: 0 auto auto 0; width: 100%;
     padding: 0 !important; color: #000 !important; background: #fff !important;
     font-size: 11pt;
   }
-  #invoice-area * { color: #000 !important; }
-  #invoice-area .text-dim { color: #555 !important; }
+  .invoice-print * { color: #000 !important; }
+  .invoice-print .text-dim { color: #555 !important; }
 
   .invoice-head { border-bottom: 2px solid #000 !important; }
   .invoice-balance { border-top: 2px solid #000 !important; }

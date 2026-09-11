@@ -241,3 +241,22 @@ reprices what is already there. A single line can still be overridden by
 tapping it. The tier resets to Standard after each sale so the next
 customer is not mispriced, and non-standard tiers are shown in amber on
 the basket line and on the receipt.
+
+
+## Bug fixes (round 2 audit)
+
+- Write-offs (PR, damage) are now editor-only both in the UI and in
+  RLS (34_writeoff_lockdown.sql) — a bar account cannot post one even
+  through the API. The old always-visible "PR/damage" shortcut inside
+  the item picker is removed; the single gated button above Sell Item
+  is now the only entry point.
+- PR/damage on the Sales panel is scoped to the department being
+  viewed, same as every other figure there (`v_daily_non_revenue`
+  gained `location_id`).
+- Switching the basket's price tier no longer overwrites a line whose
+  price was hand-edited; those lines carry `priceOverridden` and can be
+  reset back to the tier price explicitly.
+- A write-off now has its own date field (defaults to the sale date)
+  instead of silently inheriting whatever the basket was set to.
+- The receipt and the credit statement no longer share a print target
+  id — each prints independently even if both could ever be open.

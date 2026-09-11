@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { naira } from '../lib/format'
 
-export default function ItemPicker({ items, stockMap, locationId, popular, onPick, onClose, onWriteoff }) {
+export default function ItemPicker({ items, stockMap, locationId, popular, onPick, onClose }) {
   const [q, setQ] = useState('')
   const inputRef = useRef(null)
   useEffect(() => { inputRef.current?.focus() }, [])
@@ -31,21 +31,16 @@ export default function ItemPicker({ items, stockMap, locationId, popular, onPic
         {list.map(item => {
           const onHand = stockMap[`${item.id}:${locationId}`] ?? 0
           return (
-            <div key={item.id} className="w-full px-5 py-4 border-b border-line/60 flex items-center gap-3">
-              <button onClick={() => onPick(item)} className="flex-1 min-w-0 text-left active:opacity-70">
+            <button key={item.id} onClick={() => onPick(item)}
+              className="w-full text-left px-5 py-4 border-b border-line/60 flex items-center gap-3 active:bg-surface">
+              <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{item.name}</div>
                 <div className="text-dim text-sm tnum">{naira(item.selling_price)}</div>
-              </button>
+              </div>
               <div className={`tnum text-right text-sm ${onHand <= 0 ? 'text-clay' : 'text-leaf'}`}>
                 {onHand} left
               </div>
-              {onWriteoff && (
-                <button onClick={() => onWriteoff(item)}
-                  className="text-dim text-xs border border-line rounded-lg px-2 py-2">
-                  PR /<br />damage
-                </button>
-              )}
-            </div>
+            </button>
           )
         })}
         {!list.length && <p className="p-8 text-center text-dim">Nothing matches "{q}".</p>}
