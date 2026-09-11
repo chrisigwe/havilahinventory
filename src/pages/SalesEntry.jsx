@@ -24,8 +24,12 @@ export default function SalesEntry({ boot }) {
   const [openingDate, setOpeningDate] = useState(null)
   const earliestDate = (() => {
     if (canOverrideVariance) return openingDate || undefined
-    const d = new Date(Date.now() - STAFF_BACKDATE_DAYS * 864e5).toISOString().slice(0, 10)
-    return openingDate && openingDate > d ? openingDate : d
+    // count back from the Lagos business date so the boundary does not
+    // shift with the device's timezone
+    const d = new Date(todayDate + 'T12:00:00')
+    d.setDate(d.getDate() - STAFF_BACKDATE_DAYS)
+    const floor = d.toISOString().slice(0, 10)
+    return openingDate && openingDate > floor ? openingDate : floor
   })()
   const [backdateReason, setBackdateReason] = useState('')
 
@@ -195,7 +199,21 @@ export default function SalesEntry({ boot }) {
       {canBackdate ? (
         <div className="mt-2 flex items-center gap-3">
           <input type="date" value={date} max={todayDate} min={earliestDate}
-            onChange={e => setDate(e.target.value)}
+            onChange={e => {
+              const v = e.target.value
+              if (!v) return
+              if (v > todayDate) {
+                setDate(todayDate); toast('You cannot post a future date', 'error'); return
+              }
+              if (earliestDate && v < earliestDate) {
+                setDate(earliestDate)
+                toast(canOverrideVariance
+                  ? 'That is before the opening balance'
+                  : `You can only post back ${STAFF_BACKDATE_DAYS} days`, 'error')
+                return
+              }
+              setDate(v)
+            }}
             className={`h-12 px-3 rounded-xl bg-surface border tnum ${date !== todayDate
               ? 'border-amber text-amber' : 'border-line'}`} />
           {date !== todayDate && (
