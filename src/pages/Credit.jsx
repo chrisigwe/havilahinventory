@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useToast } from '../components/Toast'
 import { naira, lagosToday, methodLabel, tierLabel } from '../lib/format'
-import { loadBalances, loadCustomerLedger, saveRepayment } from '../lib/data'
+import { loadBalances, loadCustomerLedger, saveRepayment, loadBarStaff } from '../lib/data'
 
 export default function Credit({ boot }) {
   const { staff, items, methods, allLocations, locations } = boot
   const salesPoints = (locations || []).filter(l => l.is_sales_point && !l.is_store)
   const [locId, setLocId] = useState(staff.default_location_id || salesPoints[0]?.id || null)
+  const isEditor = ['storekeeper', 'manager', 'gm', 'admin'].includes(staff.role)
+  const [people, setPeople] = useState([])
+  const [staffFilter, setStaffFilter] = useState(null)   // null = everyone
   const [rows, setRows] = useState(null)
   const toast = useToast()
   const [open, setOpen] = useState(null)       // { customer, ledger }
@@ -16,13 +19,16 @@ export default function Credit({ boot }) {
   const locById = useMemo(() => Object.fromEntries((allLocations || []).map(l => [l.id, l])), [allLocations])
 
   const refresh = useCallback(() => {
-    loadBalances(staff.branch_id, locId).then(setRows).catch(e => toast(e.message, 'error'))
-  }, [staff.branch_id, locId])
+    loadBalances(staff.branch_id, locId, isEditor ? staffFilter : null)
+      .then(setRows).catch(e => toast(e.message, 'error'))
+    if (isEditor && !people.length) loadBarStaff(staff.branch_id).then(setPeople)
+  }, [staff.branch_id, locId, staffFilter, isEditor])
   useEffect(refresh, [refresh])
 
   async function openCustomer(c) {
     try {
-      const ledger = await loadCustomerLedger(staff.branch_id, c.customer_id, locId)
+      const ledger = await loadCustomerLedger(staff.branch_id, c.customer_id, locId,
+        isEditor ? (c.staff_id || null) : null)
       setOpen({ customer: c, ledger })
     } catch (e) { toast(e.message, 'error') }
   }
@@ -57,6 +63,23 @@ export default function Credit({ boot }) {
         </div>
       )}
 
+      {isEditor && people.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto py-1 -mx-1 px-1">
+          <button onClick={() => setStaffFilter(null)}
+            className={`shrink-0 h-10 px-3 rounded-full border text-sm ${!staffFilter
+              ? 'bg-raise border-amber text-amber font-bold' : 'border-line text-dim'}`}>
+            Everyone
+          </button>
+          {people.filter(p => p.role === 'bar').map(p => (
+            <button key={p.id} onClick={() => setStaffFilter(p.id)}
+              className={`shrink-0 h-10 px-3 rounded-full border text-sm ${staffFilter === p.id
+                ? 'bg-raise border-amber text-amber font-bold' : 'border-line text-dim'}`}>
+              {p.full_name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-baseline justify-between py-2">
         <h2 className="text-dim">
           Owed to {locById[locId]?.name || 'this department'}
@@ -71,6 +94,7 @@ export default function Credit({ boot }) {
               <div className="font-semibold truncate">{c.name}</div>
               <div className="text-dim text-sm">
                 {naira(c.credit_taken)} taken · {naira(c.repaid)} repaid
+                {isEditor && c.staff_name && <span> · {c.staff_name}</span>}
               </div>
             </button>
             <span className="tnum font-bold text-clay">{naira(c.balance)}</span>

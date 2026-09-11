@@ -42,6 +42,7 @@ export default function SalesEntry({ boot }) {
   const [customers, setCustomers] = useState([])
 
   const [basket, setBasket] = useState([])          // [{ key, item, tier, qty, unitPrice }]
+  const [defaultTier, setDefaultTier] = useState('general')
   const [picking, setPicking] = useState(false)
   const [tuning, setTuning] = useState(null)        // line being adjusted
   const [paying, setPaying] = useState(null)        // payment step
@@ -87,13 +88,19 @@ export default function SalesEntry({ boot }) {
   function addToBasket(item) {
     setPicking(false)
     setBasket(b => {
-      const at = b.findIndex(l => l.item.id === item.id && l.tier === 'general')
+      const at = b.findIndex(l => l.item.id === item.id && l.tier === defaultTier)
       if (at >= 0) {
         const copy = [...b]; copy[at] = { ...copy[at], qty: copy[at].qty + 1 }; return copy
       }
-      return [...b, { key: crypto.randomUUID(), item, tier: 'general', qty: 1,
-                      unitPrice: priceFor(item, 'general') }]
+      return [...b, { key: crypto.randomUUID(), item, tier: defaultTier, qty: 1,
+                      unitPrice: priceFor(item, defaultTier) }]
     })
+  }
+
+  // switching the basket tier reprices everything already in it
+  function switchTier(t) {
+    setDefaultTier(t)
+    setBasket(b => b.map(l => ({ ...l, tier: t, unitPrice: priceFor(l.item, t) })))
   }
   const patchLine = (key, patch) =>
     setBasket(b => b.map(l => l.key === key ? { ...l, ...patch } : l))
@@ -155,7 +162,7 @@ export default function SalesEntry({ boot }) {
         enqueue({ kind: 'basket', payload })
         toast('No connection — saved and will send when you are back online')
       }
-      setBasket([]); setPaying(null); refresh(); flush()
+      setBasket([]); setPaying(null); setDefaultTier('general'); refresh(); flush()
     } catch (e) {
       toast('Not saved: ' + e.message, 'error')
     }
@@ -235,6 +242,26 @@ export default function SalesEntry({ boot }) {
         </p>
       )}
 
+      {tiers.length > 1 && (
+        <div className="mt-3">
+          <div className="flex gap-2">
+            {tiers.map(t => (
+              <button key={t} onClick={() => switchTier(t)}
+                className={`flex-1 h-12 rounded-xl border font-bold ${defaultTier === t
+                  ? 'bg-amber text-bg border-amber' : 'border-line text-dim'}`}>
+                {tierLabel[t] || t}
+              </button>
+            ))}
+          </div>
+          {defaultTier !== 'general' && (
+            <p className="mt-2 text-amber text-sm">
+              {tierLabel[defaultTier]} prices — everything added is priced at this tier.
+              {defaultTier === 'staff' && ' Name the staff member below so the receipt shows who took it.'}
+            </p>
+          )}
+        </div>
+      )}
+
       <button onClick={() => setPicking(true)}
         className="mt-3 w-full h-16 rounded-2xl bg-amber text-bg text-xl font-bold active:bg-amber-deep">
         + Sell Item
@@ -247,8 +274,11 @@ export default function SalesEntry({ boot }) {
               <div className="flex items-center gap-3">
                 <button onClick={() => setTuning(l.key)} className="flex-1 min-w-0 text-left">
                   <div className="font-semibold truncate">{l.item.name}</div>
-                  <div className="text-dim text-sm">
-                    {tierLabel[l.tier] || l.tier} · {naira(l.unitPrice)} each
+                  <div className="text-sm">
+                    <span className={l.tier === 'general' ? 'text-dim' : 'text-amber font-semibold'}>
+                      {tierLabel[l.tier] || l.tier}
+                    </span>
+                    <span className="text-dim"> · {naira(l.unitPrice)} each</span>
                   </div>
                 </button>
                 <button onClick={() => patchLine(l.key, { qty: Math.max(1, l.qty - 1) })}

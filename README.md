@@ -215,3 +215,29 @@ window is enforced by `app_owns_recent()` in RLS, so it cannot be
 widened from the client. They cannot see the change
 history, and anything they alter is written to it under their name.
 Backdating remains editor-only.
+
+
+## Records are private to the person who recorded them
+
+Bar staff see only their own sales and only the credit owed to them
+(32_per_staff_records.sql). Joseph cannot see Ikenna's debtors even
+though both work Open Bar. Store manager, manager, GM and admin see
+everything for the branch and can filter the Credit tab by person.
+
+Customer NAMES remain readable branch-wide — without that, a second
+staff member typing an existing customer would hit the unique index and
+the sale would fail. Names are shared; balances and statements are not.
+
+`credit_repayments.credit_staff_id` records whose ledger a payment
+settles, which is not always who collected it: a store manager taking
+money for Joseph's debtor credits Joseph's ledger.
+
+## Price tiers
+
+The tier buttons sit above "+ Sell Item" — Standard / Lounge / Staff at
+Awka, Standard / Lounge at Nnewi, driven by `branch_price_tiers`. Pick
+the tier first and everything added is priced at it; switching mid-basket
+reprices what is already there. A single line can still be overridden by
+tapping it. The tier resets to Standard after each sale so the next
+customer is not mispriced, and non-standard tiers are shown in amber on
+the basket line and on the receipt.
