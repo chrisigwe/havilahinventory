@@ -155,11 +155,18 @@ export default function Corrections({ boot }) {
                 {d.money && <span className="tnum text-dim">{d.money}</span>}
               </div>
               <div className="flex gap-2 mt-2">
-                <button onClick={() => openEdit(r)}
-                  className="h-10 px-4 rounded-lg border border-line text-sm font-semibold">Edit</button>
+                {(isEditor || r.recorded_by === staff.id) && (
+                  <button onClick={() => openEdit(r)}
+                    className="h-10 px-4 rounded-lg border border-line text-sm font-semibold">Edit</button>
+                )}
                 {isEditor && (
                   <button onClick={() => setConfirm(r)}
                     className="h-10 px-4 rounded-lg border border-clay text-clay text-sm font-semibold">Delete</button>
+                )}
+                {r.on_behalf_of && r.recorded_by !== staff.id && (
+                  <span className="text-dim text-sm self-center">
+                    Recorded on your behalf — ask a manager to correct it
+                  </span>
                 )}
               </div>
             </li>

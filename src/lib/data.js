@@ -181,10 +181,17 @@ export async function loadActivity(branchId, days = 14, ownOnlyStaffId = null) {
     : new Date(Date.now() - days * 864e5).toISOString().slice(0, 10)
   const own = (q) => ownOnlyStaffId ? q.eq('recorded_by', ownOnlyStaffId) : q
   const [sales, moves] = await Promise.all([
-    own(supabase.from('sales')
-      .select('id, business_date, stock_item_id, location_id, tier, qty, unit_price, amount, recorded_by, created_at')
-      .eq('branch_id', branchId).gte('business_date', since)
-      .order('created_at', { ascending: false }).limit(300)),
+    // a sale recorded on someone's behalf belongs on THEIR list, not
+    // the recorder's, so match either column
+    (ownOnlyStaffId
+      ? supabase.from('sales')
+          .select('id, business_date, stock_item_id, location_id, tier, qty, unit_price, amount, recorded_by, on_behalf_of, created_at')
+          .eq('branch_id', branchId).gte('business_date', since)
+          .or(`recorded_by.eq.${ownOnlyStaffId},on_behalf_of.eq.${ownOnlyStaffId}`)
+      : supabase.from('sales')
+          .select('id, business_date, stock_item_id, location_id, tier, qty, unit_price, amount, recorded_by, on_behalf_of, created_at')
+          .eq('branch_id', branchId).gte('business_date', since)
+    ).order('created_at', { ascending: false }).limit(300),
     own(supabase.from('stock_movements')
       .select('id, business_date, stock_item_id, movement_type, from_location, to_location, qty, unit_cost, note, recorded_by, created_at')
       .eq('branch_id', branchId).gte('business_date', since)
@@ -294,7 +301,7 @@ export async function loadDailySummary(branchId, date, locationId) {
   const [takings, nonRev] = await Promise.all([
     supabase.from('v_daily_takings').select('method, amount, location_id')
       .eq('branch_id', branchId).eq('business_date', date),
-    supabase.from('v_daily_non_revenue').select('kind, qty, value')
+    supabase.from('v_daily_non_revenue').select('kind, qty, value, location_id')
       .eq('branch_id', branchId).eq('business_date', date),
   ])
   if (takings.error) throw takings.error
@@ -303,7 +310,14 @@ export async function loadDailySummary(branchId, date, locationId) {
     if (locationId && r.location_id !== locationId) continue
     byMethod[r.method] = (byMethod[r.method] || 0) + Number(r.amount)
   }
-  return { byMethod, nonRevenue: nonRev.data || [] }
+  const nonRevenue = {}
+  for (const r of (nonRev.data || [])) {
+    if (locationId && r.location_id !== locationId) continue
+    const cur = nonRevenue[r.kind] || { kind: r.kind, qty: 0, value: 0 }
+    cur.qty += Number(r.qty); cur.value += Number(r.value)
+    nonRevenue[r.kind] = cur
+  }
+  return { byMethod, nonRevenue: Object.values(nonRevenue) }
 }
 
 // ---------- customers & credit ----------
@@ -363,7 +377,10 @@ export async function loadCustomerLedger(branchId, customerId, locationId, staff
     .select('id, paid_on, method, amount, note, location_id')
     .eq('branch_id', branchId).eq('customer_id', customerId)
   if (locationId) { sq = sq.eq('location_id', locationId); rq = rq.eq('location_id', locationId) }
-  if (staffId) { sq = sq.eq('recorded_by', staffId); rq = rq.eq('credit_staff_id', staffId) }
+  if (staffId) {
+    sq = sq.or(`recorded_by.eq.${staffId},on_behalf_of.eq.${staffId}`)
+    rq = rq.eq('credit_staff_id', staffId)
+  }
   const [sales, repays] = await Promise.all([
     sq.order('business_date', { ascending: false }),
     rq.order('paid_on', { ascending: false }),

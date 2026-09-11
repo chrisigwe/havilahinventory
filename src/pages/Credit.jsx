@@ -47,6 +47,7 @@ export default function Credit({ boot }) {
       await saveRepayment({
         staff, customerId: pay.customerId, amount: Number(pay.amount),
         method: pay.method, paidOn: pay.paidOn, note: pay.note,
+        locationId: pay.locationId, creditStaffId: pay.creditStaffId,
       })
       setPay(null); setOpen(null); refresh()
     } catch (e) { toast('Not saved: ' + e.message, 'error') }
@@ -232,7 +233,10 @@ export default function Credit({ boot }) {
               className="flex-1 h-14 rounded-2xl border border-line font-bold">Print / PDF</button>
             <button onClick={() => setPay({ customerId: open.customer.customer_id,
               amount: open.customer.balance, method: methods.find(m => m !== 'credit') || 'cash',
-              paidOn: lagosToday(), note: '' })}
+              paidOn: lagosToday(), note: '',
+              balance: Number(open.customer.balance),
+              locationId: open.customer.location_id || locId,
+              creditStaffId: open.customer.staff_id || staff.id })}
               className="flex-1 h-14 rounded-2xl bg-amber text-bg font-bold">Record payment</button>
           </div>
         </div>

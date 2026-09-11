@@ -260,3 +260,28 @@ the basket line and on the receipt.
   instead of silently inheriting whatever the basket was set to.
 - The receipt and the credit statement no longer share a print target
   id — each prints independently even if both could ever be open.
+
+
+## Verification pass fixes
+
+Checking every requirement against the deployed source turned up bugs
+the earlier rounds missed:
+
+- **The repayment/debt-recovery bug was still live in the app**, despite
+  the database fix in 33. The "Record payment" button never attached a
+  department or staff to the payment (`location_id` was always saved as
+  null), so a saved payment could never match the department-filtered
+  balance it was meant to reduce — the debt kept showing as unpaid. Fixed
+  in `Credit.jsx`; also fixed the payment sheet showing "Owing ₦0" on
+  every payment regardless of the real balance, for the same reason.
+- PR/damage on the Sales panel was still branch-wide because the query
+  fetched the old column shape after `v_daily_non_revenue` gained
+  `location_id` — it was never updated to request or filter on it.
+- Sales recorded "on behalf of" a staff member reached their credit
+  ledger (via the balance view) but not their own Corrections list or
+  an individually-opened ledger, because those two raw queries matched
+  only `recorded_by`, never `on_behalf_of`. Fixed to match either.
+- Since on-behalf-of sales now appear on the recipient's own list, the
+  Edit button is hidden on entries they did not personally type — RLS
+  only lets the actual recorder amend a sale, so showing an Edit button
+  there would have failed silently. A note explains why instead.
