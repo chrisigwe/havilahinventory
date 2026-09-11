@@ -8,6 +8,7 @@ import Store from './pages/Store'
 import Corrections from './pages/Corrections'
 import Catalog from './pages/Catalog'
 import Variances from './pages/Variances'
+import Recovery from './pages/Recovery'
 import More from './pages/More'
 import { ToastHost } from './components/Toast'
 import { registerHandlers, flush } from './lib/outbox'
@@ -46,6 +47,7 @@ export default function App() {
       basket: (p) => saveBasket({
         staff: p.staffLite, locationId: p.locationId, date: p.date,
         customerId: p.customerId, payments: p.payments, lines: p.lines,
+        backdateReason: p.backdateReason, onBehalfOf: p.onBehalfOf,
       }),
       movements: (p) => saveMovements(p.rows),
       writeoff: (p) => saveWriteoff({
@@ -80,6 +82,7 @@ export default function App() {
         : tab === 'more' ? <More boot={boot} onGo={setTab} />
         : tab === 'catalog' ? <Catalog boot={boot} onChanged={refresh} />
         : tab === 'variance' ? <Variances boot={boot} />
+        : tab === 'recovery' ? <Recovery boot={boot} />
         : tab === 'credit' ? <Credit boot={boot} />
         : tab === 'count' ? <Counts boot={boot} />
         : tab === 'fix' ? <Corrections boot={boot} />

@@ -94,7 +94,18 @@ export default function Credit({ boot }) {
               <div className="font-semibold truncate">{c.name}</div>
               <div className="text-dim text-sm">
                 {naira(c.credit_taken)} taken · {naira(c.repaid)} repaid
-                {isEditor && c.staff_name && <span> · {c.staff_name}</span>}
+              </div>
+              <div className="text-dim text-sm">
+                {c.last_credit_date && (
+                  <span>
+                    {new Date(c.last_credit_date + 'T12:00:00').toLocaleDateString('en-NG',
+                      { day: 'numeric', month: 'short' })}
+                    {c.first_credit_date && c.first_credit_date !== c.last_credit_date
+                      && ` (since ${new Date(c.first_credit_date + 'T12:00:00')
+                          .toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })})`}
+                  </span>
+                )}
+                {c.staff_name && <span> · by {c.staff_name}</span>}
               </div>
             </button>
             <span className="tnum font-bold text-clay">{naira(c.balance)}</span>
@@ -225,6 +236,11 @@ export default function Credit({ boot }) {
             <button onClick={() => setPay(null)} className="text-dim">Back</button>
             <h2 className="mt-3 text-2xl font-bold">Record payment</h2>
 
+            <p className="text-dim mt-2">
+              Owing {naira(pay.balance ?? 0)}. Enter less than this for a part payment —
+              the rest stays on their account.
+            </p>
+
             <label className="block mt-6 text-dim">Amount</label>
             <input type="number" inputMode="decimal" value={pay.amount}
               onChange={e => setPay(p => ({ ...p, amount: e.target.value }))}
@@ -251,6 +267,11 @@ export default function Credit({ boot }) {
               className="mt-2 h-14 w-full px-4 rounded-xl bg-surface border border-line" />
           </div>
           <div className="p-5 border-t border-line">
+            {Number(pay.amount) > Number(pay.balance ?? 0) + 0.01 && (
+              <p className="mt-4 text-clay">
+                That is more than they owe. It will leave a credit balance.
+              </p>
+            )}
             <button onClick={submitPayment} disabled={busy || !(Number(pay.amount) > 0)}
               className="w-full h-16 rounded-2xl bg-amber text-bg text-xl font-bold disabled:opacity-40">
               {busy ? 'Saving…' : 'Save payment'}

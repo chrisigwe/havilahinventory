@@ -1,6 +1,8 @@
 const ITEMS = [
   { key: 'credit',  label: 'Credit',  hint: 'Who owes what, and record repayments',
     roles: ['bar', 'storekeeper', 'manager', 'gm', 'admin'] },
+  { key: 'recovery', label: 'Recovered debt', hint: 'Payments collected, who paid and who recovered it',
+    roles: ['bar', 'storekeeper', 'manager', 'gm', 'admin'] },
   { key: 'count',   label: 'Stock count', hint: 'Count a location and have it verified',
     roles: ['storekeeper', 'manager', 'gm', 'admin', 'auditor'] },
   { key: 'catalog', label: 'Catalog', hint: 'Items, prices and what is active',

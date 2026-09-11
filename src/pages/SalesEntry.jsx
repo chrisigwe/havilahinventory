@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { naira, lagosToday, tierLabel, methodLabel } from '../lib/format'
 import { loadStockMap, loadPopular, loadToday, saveBasket, saveWriteoff,
          loadDailySummary, loadCustomers, createCustomer,
-         loadReconciliation, loadOpeningDate, loadBalances, loadReceipt } from '../lib/data'
+         loadReconciliation, loadOpeningDate, loadBalances, loadReceipt,
+         loadBarStaff } from '../lib/data'
 import { enqueue, flush, isConnectionError } from '../lib/outbox'
 import { useToast } from '../components/Toast'
 import ItemPicker from '../components/ItemPicker'
@@ -43,6 +44,9 @@ export default function SalesEntry({ boot }) {
 
   const [basket, setBasket] = useState([])          // [{ key, item, tier, qty, unitPrice }]
   const [defaultTier, setDefaultTier] = useState('general')
+  const [writeoffMode, setWriteoffMode] = useState(false)
+  const [onBehalfOf, setOnBehalfOf] = useState(null)
+  const [people, setPeople] = useState([])
   const [picking, setPicking] = useState(false)
   const [tuning, setTuning] = useState(null)        // line being adjusted
   const [paying, setPaying] = useState(null)        // payment step
@@ -65,9 +69,12 @@ export default function SalesEntry({ boot }) {
     loadStockMap(staff.branch_id).then(setStockMap).catch(() => {})
     loadPopular(staff.branch_id).then(setPopular).catch(() => {})
     loadToday(staff.branch_id, date).then(setToday).catch(() => {})
-    loadDailySummary(staff.branch_id, date).then(setSummary).catch(() => {})
+    loadDailySummary(staff.branch_id, date, locationId).then(setSummary).catch(() => {})
     loadReconciliation(staff.branch_id, date, locationId).then(setRecon).catch(() => {})
     loadOpeningDate(staff.branch_id).then(setOpeningDate).catch(() => {})
+    if (canOverrideVariance && !people.length) {
+      loadBarStaff(staff.branch_id).then(ps => setPeople(ps.filter(p => p.role === 'bar')))
+    }
     Promise.all([loadCustomers(staff.branch_id), loadBalances(staff.branch_id, locationId).catch(() => [])])
       .then(([cs, bals]) => {
         const byId = Object.fromEntries(bals.map(b => [b.customer_id, Number(b.balance)]))
@@ -150,11 +157,11 @@ export default function SalesEntry({ boot }) {
         locationId, date, customerId,
         lines: basket.map(l => ({ item: { id: l.item.id, name: l.item.name },
                                   tier: l.tier, qty: l.qty, unitPrice: l.unitPrice })),
-        payments, backdateReason,
+        payments, backdateReason, onBehalfOf,
       }
       try {
         const rid = await saveBasket({ staff, locationId, lines: basket, payments,
-                                       date, customerId, backdateReason })
+                                       date, customerId, backdateReason, onBehalfOf })
         toast(`Saved · ${basket.length} item${basket.length > 1 ? 's' : ''} · ${naira(basketTotal)}`, 'success')
         setLastReceiptId(rid)
       } catch (e) {
@@ -252,11 +259,33 @@ export default function SalesEntry({ boot }) {
                 {tierLabel[t] || t}
               </button>
             ))}
+            {canOverrideVariance && (
+              <button onClick={() => { setWriteoffMode(true); setPicking(true) }}
+                className="flex-1 h-12 rounded-xl border border-clay text-clay font-bold">
+                PR / Damage
+              </button>
+            )}
           </div>
           {defaultTier !== 'general' && (
             <p className="mt-2 text-amber text-sm">
               {tierLabel[defaultTier]} prices — everything added is priced at this tier.
               {defaultTier === 'staff' && ' Name the staff member below so the receipt shows who took it.'}
+            </p>
+          )}
+        </div>
+      )}
+
+      {canOverrideVariance && people.length > 0 && (
+        <div className="mt-3">
+          <div className="text-dim text-sm mb-2">Recording on behalf of</div>
+          <select value={onBehalfOf || ''} onChange={e => setOnBehalfOf(e.target.value || null)}
+            className="h-12 w-full px-3 rounded-xl bg-surface border border-line">
+            <option value="">Myself</option>
+            {people.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+          </select>
+          {onBehalfOf && (
+            <p className="mt-1 text-amber text-sm">
+              This sale will appear on {people.find(p => p.id === onBehalfOf)?.full_name}'s records.
             </p>
           )}
         </div>
@@ -324,8 +353,14 @@ export default function SalesEntry({ boot }) {
               <Line label="Credit raised" value={recon.creditRaised}
                 tone={recon.creditRaised > 0 ? 'text-clay' : ''} />
               <Line label="Debt recovered (earlier sales)" value={recon.debtRecovered} tone="text-leaf" />
+              {Object.entries(recon.recoveredBy || {}).map(([m, amt]) => (
+                <div key={m} className="flex justify-between pl-4">
+                  <span className="text-dim">· recovered by {methodLabel[m] || m}</span>
+                  <span className="tnum text-dim">{naira(amt)}</span>
+                </div>
+              ))}
               <div className="pt-2 mt-2 border-t border-line flex justify-between font-bold">
-                <span>Total money in</span>
+                <span>Total income for the day</span>
                 <span className="tnum">{naira(recon.totalMoneyIn)}</span>
               </div>
             </div>
@@ -387,7 +422,14 @@ export default function SalesEntry({ boot }) {
 
       {picking && (
         <ItemPicker items={items} stockMap={stockMap} locationId={locationId}
-          popular={popular} onPick={addToBasket} onClose={() => setPicking(false)}
+          popular={popular}
+          onPick={item => {
+            if (writeoffMode) {
+              setPicking(false); setWriteoffMode(false)
+              setWriteoff({ item, kind: 'damage', qty: 1, unitValue: Number(item.selling_price) })
+            } else addToBasket(item)
+          }}
+          onClose={() => { setPicking(false); setWriteoffMode(false) }}
           onWriteoff={(item) => { setPicking(false)
             setWriteoff({ item, kind: 'damage', qty: 1, unitValue: Number(item.selling_price) }) }} />
       )}

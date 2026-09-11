@@ -11,7 +11,8 @@ export default function Store({ boot }) {
   const locations = allLocations
   const store = locations.find(l => l.is_store)
   const departments = locations.filter(l => !l.is_store)
-  const date = lagosToday()
+  const [date, setDate] = useState(lagosToday())
+  const [receiver, setReceiver] = useState('')
   const toast = useToast()
 
   const [mode, setMode] = useState('receive')       // receive | disburse
@@ -54,6 +55,7 @@ export default function Store({ boot }) {
         to_location:   mode === 'receive' ? store.id : toDept,
         qty: l.qty,
         business_date: date,
+        received_by: mode === 'disburse' ? (receiver.trim() || null) : null,
         occurred_at: new Date().toISOString(),
         recorded_by: staff.id,
         is_migrated: false,
@@ -69,7 +71,7 @@ export default function Store({ boot }) {
         enqueue({ kind: 'movements', payload: { rows } })
         toast('No connection — saved and will send when you are back online')
       }
-      setLines([]); refresh(); flush()
+      setLines([]); setReceiver(''); refresh(); flush()
     } catch (e) { toast('Not saved: ' + e.message, 'error') }
     setBusy(false)
   }
@@ -115,6 +117,25 @@ export default function Store({ boot }) {
         </div>
       )}
 
+      <div className="mt-4 flex gap-2">
+        <div className="flex-1">
+          <div className="text-dim text-sm mb-1">
+            {mode === 'receive' ? 'Date received' : 'Date issued'}
+          </div>
+          <input type="date" value={date} max={lagosToday()}
+            onChange={e => setDate(e.target.value)}
+            className="h-12 w-full px-3 rounded-xl bg-surface border border-line tnum" />
+        </div>
+        {mode === 'disburse' && (
+          <div className="flex-1">
+            <div className="text-dim text-sm mb-1">Receiver</div>
+            <input value={receiver} onChange={e => setReceiver(e.target.value)}
+              placeholder="Who collected it"
+              className="h-12 w-full px-3 rounded-xl bg-surface border border-line placeholder:text-dim" />
+          </div>
+        )}
+      </div>
+
       <button onClick={() => setPicking(true)}
         className="mt-4 w-full h-14 rounded-2xl border-2 border-amber text-amber text-lg font-bold">
         {mode === 'receive' ? '+ Receive Stock' : '+ Issue To'}
@@ -151,6 +172,9 @@ export default function Store({ boot }) {
       {!!lines.length && (
         <div className="sticky bottom-20 mt-4 pb-2">
           {overdrawn && <p className="text-clay mb-2">More than the store holds — check the count first.</p>}
+          {mode === 'disburse' && !receiver.trim() && (
+            <p className="text-dim text-sm mb-2">Add a receiver so the handover is on record.</p>
+          )}
           <button onClick={save} disabled={busy}
             className="w-full h-16 rounded-2xl bg-amber text-bg text-xl font-bold disabled:opacity-40">
             {busy ? 'Saving…' : mode === 'receive' ? 'Save delivery' : 'Issue stock'}

@@ -92,7 +92,7 @@ export async function loadToday(branchId, date) {
 
 // Records a basket: one sales row per line, with the basket's payment
 // split allocated across those lines in order.
-export async function saveBasket({ staff, locationId, lines, payments, date, customerId, backdateReason, receiptId }) {
+export async function saveBasket({ staff, locationId, lines, payments, date, customerId, backdateReason, receiptId, onBehalfOf }) {
   const receipt = receiptId || crypto.randomUUID()
   const buckets = payments.filter(p => Number(p.amount) > 0)
     .map(p => ({ method: p.method, left: Number(p.amount) }))
@@ -110,6 +110,7 @@ export async function saveBasket({ staff, locationId, lines, payments, date, cus
       customer_id: customerId || null,
       backdate_reason: backdateReason || null,
       receipt_id: receipt,
+      on_behalf_of: onBehalfOf || null,
       recorded_by: staff.id,
     }).select('id').single()
     if (error) throw error
@@ -251,19 +252,22 @@ export async function loadReconciliation(branchId, date, locationId) {
   if (locationId) q = q.eq('location_id', locationId)
   const [rec, debt] = await Promise.all([
     q,
-    supabase.from('v_debt_recovered_daily').select('amount')
+    supabase.from('v_debt_recovered_daily').select('amount, method, location_id')
       .eq('branch_id', branchId).eq('business_date', date),
   ])
   if (rec.error) throw rec.error
   const gross = (rec.data || []).reduce((s, r) => s + Number(r.gross_sales || 0), 0)
   const received = (rec.data || []).reduce((s, r) => s + Number(r.received_at_sale || 0), 0)
-  // debt recovery is branch-wide, not per location, so take it once
-  const recovered = (debt.data || []).reduce((s, r) => s + Number(r.amount || 0), 0)
+  const debtRows = (debt.data || []).filter(r => !locationId || r.location_id === locationId)
+  const recovered = debtRows.reduce((s, r) => s + Number(r.amount || 0), 0)
+  const recoveredBy = {}
+  for (const r of debtRows) recoveredBy[r.method] = (recoveredBy[r.method] || 0) + Number(r.amount)
   return {
     grossSales: gross,
     received,
     creditRaised: gross - received,
     debtRecovered: recovered,
+    recoveredBy,
     totalMoneyIn: received + recovered,
   }
 }
@@ -286,16 +290,19 @@ export async function loadOpeningDate(branchId) {
 }
 
 // ---------- daily money summary ----------
-export async function loadDailySummary(branchId, date) {
+export async function loadDailySummary(branchId, date, locationId) {
   const [takings, nonRev] = await Promise.all([
-    supabase.from('v_daily_takings').select('method, amount')
+    supabase.from('v_daily_takings').select('method, amount, location_id')
       .eq('branch_id', branchId).eq('business_date', date),
     supabase.from('v_daily_non_revenue').select('kind, qty, value')
       .eq('branch_id', branchId).eq('business_date', date),
   ])
   if (takings.error) throw takings.error
   const byMethod = {}
-  for (const r of takings.data) byMethod[r.method] = (byMethod[r.method] || 0) + Number(r.amount)
+  for (const r of takings.data) {
+    if (locationId && r.location_id !== locationId) continue
+    byMethod[r.method] = (byMethod[r.method] || 0) + Number(r.amount)
+  }
   return { byMethod, nonRevenue: nonRev.data || [] }
 }
 
@@ -339,7 +346,7 @@ function normalizeName(s) {
 // people's rows from bar staff, so this is for managers filtering
 export async function loadBalances(branchId, locationId, staffId) {
   let q = supabase.from('v_customer_balances_by_staff')
-    .select('customer_id, location_id, staff_id, staff_name, name, phone, served_by, credit_taken, repaid, balance')
+    .select('customer_id, location_id, staff_id, staff_name, name, phone, served_by, credit_taken, repaid, balance, first_credit_date, last_credit_date')
     .eq('branch_id', branchId)
   if (locationId) q = q.eq('location_id', locationId)
   if (staffId) q = q.eq('staff_id', staffId)
@@ -489,6 +496,17 @@ export async function updateSaleWithPayments(saleId, { qty, unitPrice, payments 
     const { error: e2 } = await supabase.from('sale_payments').insert(rows)
     if (e2) throw e2
   }
+}
+
+export async function loadRecovery(branchId, locationId, days = 60) {
+  const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10)
+  let q = supabase.from('v_debt_recovery')
+    .select('id, paid_on, method, amount, note, customer_name, location_name, recovered_by_name, credit_staff_name, location_id')
+    .eq('branch_id', branchId).gte('paid_on', since)
+  if (locationId) q = q.eq('location_id', locationId)
+  const { data, error } = await q.order('paid_on', { ascending: false })
+  if (error) throw error
+  return data
 }
 
 export async function saveMovements(rows) {
