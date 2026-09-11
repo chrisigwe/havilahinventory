@@ -134,10 +134,15 @@ Book of Records. Views: `v_reconciliation`, `v_debt_recovered_daily`.
 
 ## Backdating
 
-The date on a sale defaults to today. Storekeeper/manager/gm/admin can
-change it; bar staff cannot (enforced by `validate_sale_date()`, not the
-UI). Future dates are refused, and nothing may be dated before the
-branch's `opening_balance_date`. Backdated rows carry an optional reason
+The date on a sale defaults to today. Bar staff can post up to 4 days
+back; store manager, manager, GM and admin reach the opening-balance
+date (31_staff_backdate_window.sql). Future dates are refused for
+everyone. All three rules live in `validate_sale_date()`, not the UI —
+change `window_days` there to adjust the staff window.
+
+Note the interaction with corrections: bar staff can only edit their own
+entries from today and yesterday, so a sale they backdate further than
+that cannot afterwards be corrected by them — it needs a store manager. Backdated rows carry an optional reason
 and show a "backdated" marker. All reporting keys off `business_date`.
 
 ## Opening balances

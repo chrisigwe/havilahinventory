@@ -13,10 +13,20 @@ export default function SalesEntry({ boot }) {
   const { staff, locations, tiers, methods, items } = boot
   const toast = useToast()
   const salesPoints = locations.filter(l => l.is_sales_point && !l.is_store)
-  const canBackdate = ['storekeeper', 'manager', 'gm', 'admin'].includes(staff.role)
+  // anyone who records a sale may date it; overriding an unbalanced
+  // sale stays with the roles above bar staff
+  const canBackdate = staff.role !== 'auditor'
+  const canOverrideVariance = ['storekeeper', 'manager', 'gm', 'admin'].includes(staff.role)
+  // bar staff can reach back 4 days; editors go to the opening balance
+  const STAFF_BACKDATE_DAYS = 4
   const todayDate = lagosToday()
   const [date, setDate] = useState(todayDate)
   const [openingDate, setOpeningDate] = useState(null)
+  const earliestDate = (() => {
+    if (canOverrideVariance) return openingDate || undefined
+    const d = new Date(Date.now() - STAFF_BACKDATE_DAYS * 864e5).toISOString().slice(0, 10)
+    return openingDate && openingDate > d ? openingDate : d
+  })()
   const [backdateReason, setBackdateReason] = useState('')
 
   const [locationId, setLocationId] = useState(staff.default_location_id || salesPoints[0]?.id)
@@ -118,7 +128,7 @@ export default function SalesEntry({ boot }) {
         const msg = diff > 0
           ? `${naira(diff)} unaccounted. Record it as credit, or correct the amount.`
           : `${naira(-diff)} more allocated than the sale is worth.`
-        if (!canBackdate) { toast(msg, 'error'); setBusy(false); return }
+        if (!canOverrideVariance) { toast(msg, 'error'); setBusy(false); return }
         if (!window.confirm(msg + '\n\nSave anyway? It will appear in the variance report.')) {
           setBusy(false); return
         }
@@ -184,7 +194,7 @@ export default function SalesEntry({ boot }) {
 
       {canBackdate ? (
         <div className="mt-2 flex items-center gap-3">
-          <input type="date" value={date} max={todayDate} min={openingDate || undefined}
+          <input type="date" value={date} max={todayDate} min={earliestDate}
             onChange={e => setDate(e.target.value)}
             className={`h-12 px-3 rounded-xl bg-surface border tnum ${date !== todayDate
               ? 'border-amber text-amber' : 'border-line'}`} />
@@ -199,6 +209,11 @@ export default function SalesEntry({ boot }) {
         <p className="mt-2 text-amber text-sm">
           Posting to {new Date(date + 'T12:00:00').toLocaleDateString('en-NG',
             { weekday: 'long', day: 'numeric', month: 'long' })} — not today.
+        </p>
+      )}
+      {canBackdate && !canOverrideVariance && (
+        <p className="mt-1 text-dim text-sm">
+          You can post up to {STAFF_BACKDATE_DAYS} days back. Ask a manager for anything older.
         </p>
       )}
 
