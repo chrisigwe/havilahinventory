@@ -584,3 +584,14 @@ export async function loadBarStaff(branchId) {
   if (error) return []
   return data
 }
+
+export async function deleteCustomer(customerId) {
+  const { error } = await supabase.rpc('delete_customer', { p_customer: customerId })
+  if (error) throw error
+}
+
+export async function deactivateCustomer(customerId) {
+  const { error } = await supabase.from('customers')
+    .update({ is_active: false }).eq('id', customerId)
+  if (error) throw error
+}

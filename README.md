@@ -394,3 +394,16 @@ Search also works on Change History, matching against the stored
 summary text and date, since that view has no structured location
 field of its own — the summary text already names the department, so
 a search for "MainBar" still finds it.
+
+
+## Deleting a customer
+
+GM and admin only see a "Delete customer" button on a customer's
+statement — narrower than the general edit right on the Credit page,
+which also covers storekeepers. Same safety rule as catalog items:
+`delete_customer()` (46_credit_customer_delete.sql) refuses to remove
+anyone with a single sale or repayment against them, ever, and names
+the counts in its error. The confirmation dialog offers "Deactivate
+instead" right there for that common case — it hides the customer from
+future credit sales without touching their history, reusing the
+existing `customers.is_active` flag.

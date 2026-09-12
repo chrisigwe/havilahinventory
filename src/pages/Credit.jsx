@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useToast } from '../components/Toast'
 import { naira, lagosToday, methodLabel, tierLabel } from '../lib/format'
-import { loadBalances, loadCustomerLedger, saveRepayment, loadBarStaff } from '../lib/data'
+import { loadBalances, loadCustomerLedger, saveRepayment, loadBarStaff,
+         deleteCustomer, deactivateCustomer } from '../lib/data'
 import { enqueue, flush, isConnectionError } from '../lib/outbox'
 
 function printStatement() {
@@ -17,6 +18,9 @@ export default function Credit({ boot }) {
   const salesPoints = (locations || []).filter(l => l.is_sales_point && !l.is_store)
   const [locId, setLocId] = useState(staff.default_location_id || salesPoints[0]?.id || null)
   const isEditor = ['storekeeper', 'manager', 'gm', 'admin'].includes(staff.role)
+  const isAdmin = ['gm', 'admin'].includes(staff.role)
+  const [confirmDel, setConfirmDel] = useState(null)
+  const [delBusy, setDelBusy] = useState(false)
   const [people, setPeople] = useState([])
   const [staffFilter, setStaffFilter] = useState(null)   // null = everyone
   const [rows, setRows] = useState(null)
@@ -250,6 +254,51 @@ export default function Credit({ boot }) {
               creditStaffId: open.customer.staff_id || staff.id })}
               className="flex-1 h-14 rounded-2xl bg-amber text-bg font-bold">Record payment</button>
           </div>
+          {isAdmin && (
+            <div className="px-5 pb-5 print:hidden">
+              <button onClick={() => setConfirmDel(open.customer)}
+                className="w-full h-12 rounded-xl border border-clay text-clay font-semibold">
+                Delete customer
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {confirmDel && (
+        <div className="fixed inset-0 z-[60] bg-bg flex flex-col justify-center px-6">
+          <h2 className="text-2xl font-bold">Delete "{confirmDel.name}"?</h2>
+          <p className="text-dim mt-2">
+            This only succeeds if the customer has no sales or repayments
+            against them, ever. If they do, you'll get an error explaining
+            why — deactivate them instead in that case, which removes them
+            from future credit sales without touching their history.
+          </p>
+          <button onClick={async () => {
+              setDelBusy(true)
+              try {
+                await deleteCustomer(confirmDel.customer_id)
+                toast('Customer deleted', 'success')
+                setConfirmDel(null); setOpen(null); refresh()
+              } catch (e) { toast(e.message, 'error') }
+              setDelBusy(false)
+            }} disabled={delBusy}
+            className="mt-6 w-full h-14 rounded-2xl bg-clay text-bg text-lg font-bold disabled:opacity-40">
+            {delBusy ? 'Deleting…' : 'Delete permanently'}
+          </button>
+          <button onClick={async () => {
+              setDelBusy(true)
+              try {
+                await deactivateCustomer(confirmDel.customer_id)
+                toast('Customer deactivated — hidden from future credit sales', 'success')
+                setConfirmDel(null); setOpen(null); refresh()
+              } catch (e) { toast(e.message, 'error') }
+              setDelBusy(false)
+            }} disabled={delBusy}
+            className="mt-3 w-full h-12 rounded-xl border border-amber text-amber font-semibold disabled:opacity-40">
+            Deactivate instead
+          </button>
+          <button onClick={() => setConfirmDel(null)} className="mt-3 w-full h-12 text-dim">Cancel</button>
         </div>
       )}
 
