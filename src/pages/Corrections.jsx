@@ -16,9 +16,32 @@ export default function Corrections({ boot }) {
   const [edit, setEdit] = useState(null)
   const [confirm, setConfirm] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [query, setQuery] = useState('')
+  const [deptFilter, setDeptFilter] = useState('all')
 
   const itemById = useMemo(() => Object.fromEntries(items.map(i => [i.id, i])), [items])
   const locById  = useMemo(() => Object.fromEntries(allLocations.map(l => [l.id, l])), [allLocations])
+
+  const rowLocationId = (r) => r.kind === 'sale' ? r.location_id : (r.to_location || r.from_location)
+
+  const filteredRows = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return (rows || []).filter(r => {
+      if (deptFilter !== 'all' && rowLocationId(r) !== deptFilter) return false
+      if (!q) return true
+      const item = itemById[r.stock_item_id]?.name?.toLowerCase() || ''
+      const dept = locById[rowLocationId(r)]?.name?.toLowerCase() || ''
+      const date = r.business_date || ''
+      return item.includes(q) || dept.includes(q) || date.includes(q)
+    })
+  }, [rows, query, deptFilter, itemById, locById])
+
+  const filteredAudit = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return audit || []
+    return (audit || []).filter(a =>
+      a.summary?.toLowerCase().includes(q) || (a.business_date || '').includes(q))
+  }, [audit, query])
 
   const refresh = useCallback(() => {
     if (canEdit) {
@@ -110,9 +133,30 @@ export default function Corrections({ boot }) {
         </p>
       )}
 
+      <input value={query} onChange={e => setQuery(e.target.value)}
+        placeholder="Search by item, department, or date (YYYY-MM-DD)"
+        className="w-full h-12 px-4 mt-1 mb-2 rounded-xl bg-surface border border-line placeholder:text-dim" />
+
+      {view !== 'history' && allLocations.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+          <button onClick={() => setDeptFilter('all')}
+            className={`shrink-0 h-9 px-3 rounded-full border text-sm ${deptFilter === 'all'
+              ? 'bg-raise border-amber text-amber font-bold' : 'border-line text-dim'}`}>
+            All departments
+          </button>
+          {allLocations.map(l => (
+            <button key={l.id} onClick={() => setDeptFilter(l.id)}
+              className={`shrink-0 h-9 px-3 rounded-full border text-sm ${deptFilter === l.id
+                ? 'bg-raise border-amber text-amber font-bold' : 'border-line text-dim'}`}>
+              {l.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {view === 'history' ? (
         <ul className="divide-y divide-line/60">
-          {(audit || []).map(a => (
+          {filteredAudit.map(a => (
             <li key={a.id} className="py-3">
               <div className="flex items-baseline gap-3">
                 <span className={`text-sm font-bold ${a.action === 'deleted' ? 'text-clay' : 'text-amber'}`}>
@@ -128,8 +172,10 @@ export default function Corrections({ boot }) {
               <p className="text-dim text-sm mt-0.5">by {a.done_by_name || 'unknown'}</p>
             </li>
           ))}
-          {audit && !audit.length && (
-            <li className="py-8 text-center text-dim">Nothing has been changed or deleted yet.</li>
+          {audit && !filteredAudit.length && (
+            <li className="py-8 text-center text-dim">
+              {audit.length ? 'Nothing matches that search.' : 'Nothing has been changed or deleted yet.'}
+            </li>
           )}
           {!audit && <li className="py-8 text-center text-dim">Loading…</li>}
         </ul>
@@ -141,7 +187,7 @@ export default function Corrections({ boot }) {
           : 'Last 14 days. Deleting a sale also reverses its stock deduction.'}
       </p>
       <ul className="divide-y divide-line/60">
-        {rows.map(r => {
+        {filteredRows.map(r => {
           const d = describe(r)
           return (
             <li key={`${r.kind}:${r.id}`} className="py-3">
@@ -177,7 +223,11 @@ export default function Corrections({ boot }) {
             </li>
           )
         })}
-        {!rows.length && <li className="py-8 text-center text-dim">No entries in the last 14 days.</li>}
+        {!filteredRows.length && (
+          <li className="py-8 text-center text-dim">
+            {rows.length ? 'Nothing matches that search.' : 'No entries in the last 14 days.'}
+          </li>
+        )}
       </ul>
       </>
       )}

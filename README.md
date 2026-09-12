@@ -379,3 +379,18 @@ found. Only a genuinely unused item (created by mistake, or a stray
 duplicate never actually transacted against) can be hard-deleted.
 Everything else stays on the "deactivate" path that already existed,
 which hides an item everywhere without touching its history.
+
+
+## Search and department filter on Corrections
+
+The Corrections screen now has a search box (item name, department, or
+a date in YYYY-MM-DD) and, on the Entries view, department chips —
+matching the same pattern used on Sales and Store. Department is
+resolved per entry regardless of type: a sale's own location, or a
+movement's destination (falling back to its source for things leaving
+a location, like an issue or disbursement).
+
+Search also works on Change History, matching against the stored
+summary text and date, since that view has no structured location
+field of its own — the summary text already names the department, so
+a search for "MainBar" still finds it.
