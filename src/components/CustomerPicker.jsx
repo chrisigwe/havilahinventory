@@ -1,17 +1,7 @@
 import { useMemo, useState } from 'react'
 import { naira } from '../lib/format'
 
-// Same rule as normalize_customer_name() in the database, so the app
-// warns about a duplicate before the unique index rejects it.
-export function nameKey(s) {
-  return (s || '').toLowerCase()
-    .replace(/\(.*?\)/g, ' ')
-    .replace(/\b(c\/o|c\.o\.|care of)\b.*$/, ' ')
-    .replace(/\b(mr|mrs|miss|ms|dr|chief|engr|engineer|alhaji|alhaja|pastor|rev|prof|sir|madam|mallam|barr)\b\.?/g, ' ')
-    .replace(/[^a-z0-9 ]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
+import { normalizeCustomerName as nameKey } from '../lib/customerName'
 
 export default function CustomerPicker({ customers, value, onPick, onCreate }) {
   const [q, setQ] = useState('')

@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { normalizeCustomerName } from './customerName'
 
 export async function loadBranches() {
   const { data, error } = await supabase.from('branches')
@@ -339,21 +340,12 @@ export async function createCustomer(branchId, name, servedBy) {
     if (String(error.code) === '23505') {
       const { data: found } = await supabase.from('customers')
         .select('id, name, served_by').eq('branch_id', branchId)
-        .eq('name_key', normalizeName(name)).maybeSingle()
+        .eq('name_key', normalizeCustomerName(name)).maybeSingle()
       if (found) return found
     }
     throw error
   }
   return data
-}
-
-function normalizeName(s) {
-  return (s || '').toLowerCase()
-    .replace(/\(.*?\)/g, ' ')
-    .replace(/\b(c\/o|c\.o\.|care of)\b.*$/, ' ')
-    .replace(/\b(mr|mrs|miss|ms|dr|chief|engr|engineer|alhaji|alhaja|pastor|rev|prof|sir|madam|mallam|barr)\b\.?/g, ' ')
-    .replace(/[^a-z0-9 ]/g, ' ')
-    .replace(/\s+/g, ' ').trim()
 }
 
 // staffId narrows to one person's debtors; RLS already hides other
@@ -405,21 +397,6 @@ export async function saveRepayment({ staff, customerId, amount, method, paidOn,
 }
 
 // ---------- stock counts ----------
-export async function startCount({ staff, locationId, stockMap, items }) {
-  const { data: count, error } = await supabase.from('stock_counts').insert({
-    branch_id: staff.branch_id, location_id: locationId,
-    counted_by: staff.id, status: 'draft',
-  }).select('id').single()
-  if (error) throw error
-  const lines = items.map(i => ({
-    count_id: count.id, stock_item_id: i.id,
-    system_qty: stockMap[`${i.id}:${locationId}`] ?? 0, counted_qty: null,
-  }))
-  const { error: e2 } = await supabase.from('stock_count_lines').insert(lines)
-  if (e2) throw e2
-  return count.id
-}
-
 export async function loadCounts(branchId) {
   const { data, error } = await supabase.from('stock_counts')
     .select('id, count_date, status, location_id, counted_by, verified_by, submitted_at, verified_at, note')

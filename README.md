@@ -285,3 +285,24 @@ the earlier rounds missed:
   Edit button is hidden on entries they did not personally type — RLS
   only lets the actual recorder amend a sale, so showing an Edit button
   there would have failed silently. A note explains why instead.
+
+
+## Fresh-start scoping (round 3 audit)
+
+- Variances now respect a branch's `opening_balance_date` at the
+  database level (`v_sale_variances`, 38_variances_respect_opening_date.sql)
+  — the same rule backdating already followed. Nothing is deleted;
+  pre-reset variances simply stop being reported once a branch has
+  moved past them with a fresh start. Applies to any branch that ever
+  gets reset this way, not just today's.
+- The customer-name normalizer existed as two separate JS copies, and
+  both had drifted out of sync with the database function after an
+  earlier live update (added "doctor", "oga", "aunty", and others).
+  One copy only weakened a UI hint; the other sat in the
+  duplicate-conflict recovery path in `createCustomer` — a mismatch
+  there could make the recovery miss the existing customer and surface
+  a raw database error mid-sale instead of quietly reusing the right
+  record. Unified into `src/lib/customerName.js`, one function, used
+  everywhere, so this can't drift again.
+- Removed a dead, unused `startCount` function left over from an
+  earlier round.
