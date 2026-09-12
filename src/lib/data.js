@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { lagosDaysAgo } from './format'
 import { normalizeCustomerName } from './customerName'
 
 export async function loadBranches() {
@@ -177,9 +178,9 @@ export async function saveWriteoff({ staff, item, locationId, kind, qty, unitVal
 
 // Recent activity across sales and stock movements, newest first.
 export async function loadActivity(branchId, days = 14, ownOnlyStaffId = null) {
-  const since = ownOnlyStaffId
-    ? new Date(Date.now() - 1 * 864e5).toISOString().slice(0, 10)
-    : new Date(Date.now() - days * 864e5).toISOString().slice(0, 10)
+  // own-only matches app_owns_recent() in the database exactly: today
+  // and yesterday, by Lagos calendar date, not a raw 24-hour window
+  const since = ownOnlyStaffId ? lagosDaysAgo(1) : lagosDaysAgo(days)
   const own = (q) => ownOnlyStaffId ? q.eq('recorded_by', ownOnlyStaffId) : q
   const [sales, moves] = await Promise.all([
     // a sale recorded on someone's behalf belongs on THEIR list, not

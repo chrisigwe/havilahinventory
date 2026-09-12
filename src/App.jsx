@@ -12,7 +12,8 @@ import Recovery from './pages/Recovery'
 import More from './pages/More'
 import { ToastHost } from './components/Toast'
 import { registerHandlers, flush } from './lib/outbox'
-import { saveBasket, saveWriteoff, saveMovements, loadBranches } from './lib/data'
+import { saveBasket, saveWriteoff, saveMovements, loadBranches,
+         saveRepayment, saveCountLine } from './lib/data'
 import Credit from './pages/Credit'
 import Counts from './pages/Counts'
 import Shell from './components/Shell'
@@ -50,6 +51,8 @@ export default function App() {
         backdateReason: p.backdateReason, onBehalfOf: p.onBehalfOf,
       }),
       movements: (p) => saveMovements(p.rows),
+      repayment: (p) => saveRepayment({ ...p, staff: p.staffLite }),
+      countLine: (p) => saveCountLine(p.countId, p.itemId, p.qty),
       writeoff: (p) => saveWriteoff({
         staff: p.staffLite, item: { id: p.itemId }, locationId: p.locationId,
         kind: p.kind, qty: p.qty, unitValue: p.unitValue, date: p.date,

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useToast } from '../components/Toast'
 import { naira, lagosToday, methodLabel, tierLabel } from '../lib/format'
 import { loadBalances, loadCustomerLedger, saveRepayment, loadBarStaff } from '../lib/data'
+import { enqueue, flush, isConnectionError } from '../lib/outbox'
 
 function printStatement() {
   document.querySelectorAll('.invoice-print').forEach(el => {
@@ -43,12 +44,22 @@ export default function Credit({ boot }) {
 
   async function submitPayment() {
     setBusy(true)
+    const args = {
+      staffLite: { id: staff.id, branch_id: staff.branch_id },
+      customerId: pay.customerId, amount: Number(pay.amount),
+      method: pay.method, paidOn: pay.paidOn, note: pay.note,
+      locationId: pay.locationId, creditStaffId: pay.creditStaffId,
+    }
     try {
-      await saveRepayment({
-        staff, customerId: pay.customerId, amount: Number(pay.amount),
-        method: pay.method, paidOn: pay.paidOn, note: pay.note,
-        locationId: pay.locationId, creditStaffId: pay.creditStaffId,
-      })
+      try {
+        await saveRepayment({ ...args, staff })
+        toast('Payment recorded', 'success')
+      } catch (e) {
+        if (!isConnectionError(e)) throw e
+        enqueue({ kind: 'repayment', payload: args })
+        toast('No connection — payment saved and will send when you are back online')
+        flush()
+      }
       setPay(null); setOpen(null); refresh()
     } catch (e) { toast('Not saved: ' + e.message, 'error') }
     setBusy(false)

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { naira, tierLabel, methodLabel } from '../lib/format'
+import { naira, tierLabel, methodLabel, lagosDaysAgo } from '../lib/format'
 import { loadActivity, deleteEntry, updateEntry, loadAudit,
          loadSalePayments, updateSaleWithPayments } from '../lib/data'
 import { useToast } from '../components/Toast'
@@ -155,9 +155,14 @@ export default function Corrections({ boot }) {
                 {d.money && <span className="tnum text-dim">{d.money}</span>}
               </div>
               <div className="flex gap-2 mt-2">
-                {(isEditor || r.recorded_by === staff.id) && (
+                {(isEditor || (r.recorded_by === staff.id && r.business_date >= lagosDaysAgo(1))) && (
                   <button onClick={() => openEdit(r)}
                     className="h-10 px-4 rounded-lg border border-line text-sm font-semibold">Edit</button>
+                )}
+                {!isEditor && r.recorded_by === staff.id && r.business_date < lagosDaysAgo(1) && (
+                  <span className="text-dim text-sm self-center">
+                    Too old to edit yourself — ask a manager
+                  </span>
                 )}
                 {isEditor && (
                   <button onClick={() => setConfirm(r)}

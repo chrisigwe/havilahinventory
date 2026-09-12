@@ -3,6 +3,7 @@ import { loadStockMap, loadCounts, loadCountLines, saveCountLine,
          startCountOfType, submitCount, verifyCount, deleteCount,
          postOpeningBalance } from '../lib/data'
 import { lagosToday } from '../lib/format'
+import { enqueue, flush, isConnectionError } from '../lib/outbox'
 import { useToast } from '../components/Toast'
 
 const AUDITOR = ['auditor', 'gm', 'admin']
@@ -53,8 +54,26 @@ export default function Counts({ boot }) {
   async function setLine(itemId, value) {
     const qty = value === '' ? null : Number(value)
     setOpen(o => ({ ...o, lines: o.lines.map(l =>
-      l.stock_item_id === itemId ? { ...l, counted_qty: qty } : l) }))
-    if (qty !== null) { try { await saveCountLine(open.count.id, itemId, qty) } catch (e) { console.error(e) } }
+      l.stock_item_id === itemId ? { ...l, counted_qty: qty, pending: qty !== null } : l) }))
+    if (qty === null) return
+    const countId = open.count.id
+    try {
+      await saveCountLine(countId, itemId, qty)
+      setOpen(o => o?.count.id === countId ? { ...o, lines: o.lines.map(l =>
+        l.stock_item_id === itemId ? { ...l, pending: false } : l) } : o)
+    } catch (e) {
+      if (isConnectionError(e)) {
+        // count lines are a plain upsert by (count, item) — safe to
+        // replay later, the last value written always wins
+        enqueue({ kind: 'countLine', payload: { countId, itemId, qty } })
+        toast('No connection — this count will send once you are back online')
+        flush()
+      } else {
+        setOpen(o => o?.count.id === countId ? { ...o, lines: o.lines.map(l =>
+          l.stock_item_id === itemId ? { ...l, pending: false } : l) } : o)
+        toast('Could not save that count: ' + e.message, 'error')
+      }
+    }
   }
 
   async function doSubmit() {
@@ -171,7 +190,8 @@ export default function Counts({ boot }) {
                         <input type="number" inputMode="numeric"
                           value={l.counted_qty ?? ''} placeholder="—"
                           onChange={e => setLine(l.stock_item_id, e.target.value)}
-                          className="h-11 w-20 px-2 rounded-lg bg-surface border border-line tnum text-center" />
+                          className={`h-11 w-20 px-2 rounded-lg bg-surface border tnum text-center ${
+                            l.pending ? 'border-amber' : 'border-line'}`} />
                       ) : (
                         <span className="tnum w-20 text-center">{l.counted_qty ?? '—'}</span>
                       )}

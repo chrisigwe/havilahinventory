@@ -306,3 +306,36 @@ the earlier rounds missed:
   everywhere, so this can't drift again.
 - Removed a dead, unused `startCount` function left over from an
   earlier round.
+
+
+## Final sweep (round 4)
+
+- **Silent count-line save failures, now fixed.** A dropped connection
+  while entering a stock count updated the number on screen but failed
+  the actual save with only a `console.error` — no toast, nothing to
+  tell the person their entry hadn't landed. A count could be submitted
+  looking complete while some lines were silently still null, producing
+  wrong variance postings with no warning. Count-line saves now surface
+  a clear error, or queue through the offline outbox and retry
+  automatically — same mechanism already proven for sales.
+- **Credit repayments now go through the offline outbox too** — the same
+  real-world conditions as a sale (weak signal at the counter) could
+  previously fail a payment with no retry.
+- **Fixed a timezone bug in "own recent entries."** The bar-staff
+  edit window was computed from raw UTC time instead of the Lagos
+  business date, so near midnight it could show a third day of entries
+  whose Edit button would predictably fail against the database's
+  correctly-timezoned boundary. Both now compute the same way
+  (`lagosDaysAgo()`), and the Edit button itself checks the date, not
+  just who recorded the entry, so it never appears where it can't work.
+- Confirmed clean: no dangling references to removed features (the old
+  picker write-off shortcut, the shared print-target id), all six roles
+  consistently gated across every screen, and the auditor's two-tab
+  view (Stock, Count only) holds together correctly end to end.
+- **Known, deliberate gap:** the 4-day staff backdating limit is a
+  constant in both the database function and the React component
+  (`STAFF_BACKDATE_DAYS`). The database is the real enforcement, so a
+  mismatch could only ever show the wrong number in the UI, never
+  permit an out-of-bounds post — left as two constants rather than
+  adding a settings lookup for one cosmetic value, but worth knowing
+  if that limit is ever changed.
