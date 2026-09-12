@@ -459,6 +459,18 @@ export async function deleteCount(countId) {
 
 
 // ---------- catalog ----------
+export async function loadAllCatalogItems(branchId) {
+  const { data, error } = await supabase.from('stock_items')
+    .select('*').eq('branch_id', branchId).order('name')
+  if (error) throw error
+  return data
+}
+
+export async function deleteCatalogItem(itemId) {
+  const { error } = await supabase.rpc('delete_stock_item', { p_item: itemId })
+  if (error) throw error
+}
+
 export async function saveItemPrices(itemId, patch) {
   const { error } = await supabase.from('stock_items').update(patch).eq('id', itemId)
   if (error) throw error

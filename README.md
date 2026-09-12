@@ -362,3 +362,20 @@ each get an individual login — the file includes both paths. Individual
 logins match how every other credit/sales attribution in this app
 works (`recorded_by`, `credit_staff_id`), so that's the recommended one
 unless there's a reason to keep it shared.
+
+
+## Catalog: full visibility and safe delete
+
+The Catalog screen now fetches all items — active and inactive — for
+itself (`loadAllCatalogItems`), separate from `boot.items` (which stays
+active-only everywhere else, so pickers are unaffected). Active /
+Inactive / All filter chips let an admin find and reactivate something
+previously deactivated, which was impossible before.
+
+Delete is real but guarded: `delete_stock_item()` (43_catalog_delete.sql)
+refuses to remove anything with a single sale, movement, or count line
+against it, anywhere, ever — the error names exactly how many of each it
+found. Only a genuinely unused item (created by mistake, or a stray
+duplicate never actually transacted against) can be hard-deleted.
+Everything else stays on the "deactivate" path that already existed,
+which hides an item everywhere without touching its history.

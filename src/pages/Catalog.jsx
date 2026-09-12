@@ -1,21 +1,30 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { naira } from '../lib/format'
-import { saveItemPrices, createItem } from '../lib/data'
+import { saveItemPrices, createItem, loadAllCatalogItems, deleteCatalogItem } from '../lib/data'
 import { useToast } from '../components/Toast'
 
 export default function Catalog({ boot, onChanged }) {
-  const { staff, items, tiers } = boot
+  const { staff, tiers } = boot
   const toast = useToast()
+  const [all, setAll] = useState(null)     // active + inactive, fetched separately from boot.items
   const [q, setQ] = useState('')
+  const [show, setShow] = useState('active')   // active | inactive | all
   const [edit, setEdit] = useState(null)
   const [adding, setAdding] = useState(null)
+  const [confirmDel, setConfirmDel] = useState(null)
   const [busy, setBusy] = useState(false)
 
+  const refreshAll = () => loadAllCatalogItems(staff.branch_id).then(setAll).catch(() => setAll([]))
+  useEffect(refreshAll, [staff.branch_id])
+
   const list = useMemo(() => {
+    if (!all) return []
     const n = q.trim().toLowerCase()
-    return items.filter(i => !n || i.name.toLowerCase().includes(n))
+    return all
+      .filter(i => show === 'all' || (show === 'active') === i.is_active)
+      .filter(i => !n || i.name.toLowerCase().includes(n))
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [items, q])
+  }, [all, q, show])
 
   async function save() {
     setBusy(true)
@@ -29,8 +38,17 @@ export default function Catalog({ boot, onChanged }) {
         is_active: edit.is_active,
       }
       await saveItemPrices(edit.id, patch)
-      toast('Saved', 'success'); setEdit(null); onChanged?.()
+      toast('Saved', 'success'); setEdit(null); refreshAll(); onChanged?.()
     } catch (e) { toast('Not saved: ' + e.message, 'error') }
+    setBusy(false)
+  }
+
+  async function doDelete() {
+    setBusy(true)
+    try {
+      await deleteCatalogItem(confirmDel.id)
+      toast('Item deleted', 'success'); setConfirmDel(null); setEdit(null); refreshAll(); onChanged?.()
+    } catch (e) { toast(e.message, 'error') }
     setBusy(false)
   }
 
@@ -45,7 +63,7 @@ export default function Catalog({ boot, onChanged }) {
         cost_price: adding.cost_price === '' ? null : Number(adding.cost_price),
         is_active: true,
       })
-      toast('Item added', 'success'); setAdding(null); onChanged?.()
+      toast('Item added', 'success'); setAdding(null); refreshAll(); onChanged?.()
     } catch (e) { toast('Not added: ' + e.message, 'error') }
     setBusy(false)
   }
@@ -58,6 +76,15 @@ export default function Catalog({ boot, onChanged }) {
         <button onClick={() => setAdding({ code: '', name: '', selling_price: '', lounge_price: '', cost_price: '' })}
           className="h-12 px-4 rounded-xl bg-amber text-bg font-bold">+ New</button>
       </div>
+      <div className="flex gap-2 pb-2">
+        {[['active', 'Active'], ['inactive', 'Inactive'], ['all', 'All']].map(([k, label]) => (
+          <button key={k} onClick={() => setShow(k)}
+            className={`h-9 px-3 rounded-full border text-sm ${show === k
+              ? 'bg-raise border-amber text-amber font-bold' : 'border-line text-dim'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
 
       <ul className="divide-y divide-line/60">
         {list.map(i => (
@@ -66,7 +93,9 @@ export default function Catalog({ boot, onChanged }) {
               lounge_price: i.lounge_price ?? '', staff_price: i.staff_price ?? '',
               cost_price: i.cost_price ?? '' })}
               className="w-full text-left py-3 flex items-center gap-3">
-              <span className="flex-1 min-w-0 truncate font-semibold">{i.name}</span>
+              <span className={`flex-1 min-w-0 truncate font-semibold ${!i.is_active ? 'text-dim line-through' : ''}`}>
+                {i.name}
+              </span>
               {i.cost_price != null && (
                 <span className="text-dim text-sm tnum">cost {naira(i.cost_price)}</span>
               )}
@@ -124,11 +153,22 @@ export default function Catalog({ boot, onChanged }) {
             </Field>
 
             {edit && (
-              <label className="mt-6 flex items-center gap-3">
-                <input type="checkbox" checked={edit.is_active} className="w-5 h-5"
-                  onChange={e => setEdit(x => ({ ...x, is_active: e.target.checked }))} />
-                <span>Active — appears when recording sales</span>
-              </label>
+              <>
+                <label className="mt-6 flex items-center gap-3">
+                  <input type="checkbox" checked={edit.is_active} className="w-5 h-5"
+                    onChange={e => setEdit(x => ({ ...x, is_active: e.target.checked }))} />
+                  <span>Active — appears when recording sales</span>
+                </label>
+                <button onClick={() => setConfirmDel(edit)}
+                  className="mt-6 w-full h-12 rounded-xl border border-clay text-clay font-semibold">
+                  Delete permanently
+                </button>
+                <p className="text-dim text-sm mt-2">
+                  Only works if this item has never been sold, moved, or counted.
+                  Otherwise, turn off "Active" instead — that hides it everywhere
+                  without touching its history.
+                </p>
+              </>
             )}
           </div>
           <div className="p-5 border-t border-line">
@@ -137,6 +177,21 @@ export default function Catalog({ boot, onChanged }) {
               {busy ? 'Saving…' : edit ? 'Save changes' : 'Add item'}
             </button>
           </div>
+        </div>
+      )}
+      {confirmDel && (
+        <div className="fixed inset-0 z-[60] bg-bg flex flex-col justify-center px-6">
+          <h2 className="text-2xl font-bold">Delete "{confirmDel.name}"?</h2>
+          <p className="text-dim mt-2">
+            This only succeeds if the item has no sales, movements, or counts
+            against it anywhere. If it does, you'll get an error explaining why —
+            deactivate it instead in that case.
+          </p>
+          <button onClick={doDelete} disabled={busy}
+            className="mt-6 w-full h-14 rounded-2xl bg-clay text-bg text-lg font-bold disabled:opacity-40">
+            {busy ? 'Deleting…' : 'Delete permanently'}
+          </button>
+          <button onClick={() => setConfirmDel(null)} className="mt-3 w-full h-12 text-dim">Cancel</button>
         </div>
       )}
     </div>
