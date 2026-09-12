@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useToast } from '../components/Toast'
 import { naira, lagosToday } from '../lib/format'
-import { loadStockMap, loadPopular } from '../lib/data'
+import { loadStockMap, loadPopular, loadDepartmentHistory } from '../lib/data'
 import { supabase } from '../lib/supabase'
 import { enqueue, flush, isConnectionError } from '../lib/outbox'
 import ItemPicker from '../components/ItemPicker'
@@ -22,6 +22,8 @@ export default function Store({ boot }) {
   const [lines, setLines] = useState([])            // staged, saved together
   const [toDept, setToDept] = useState(departments[0]?.id)
   const [busy, setBusy] = useState(false)
+  const [history, setHistory] = useState(null)
+  const [showHistory, setShowHistory] = useState(false)
 
   const refresh = useCallback(() => {
     const since = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10)
@@ -29,6 +31,12 @@ export default function Store({ boot }) {
     loadPopular(staff.branch_id, since).then(setPopular).catch(console.error)
   }, [staff.branch_id])
   useEffect(refresh, [refresh])
+
+  useEffect(() => {
+    if (mode !== 'disburse' || !toDept) return
+    setHistory(null)
+    loadDepartmentHistory(staff.branch_id, toDept).then(setHistory).catch(() => setHistory([]))
+  }, [staff.branch_id, mode, toDept])
 
   const storeQty = useMemo(
     () => (id) => stockMap[`${id}:${store?.id}`] ?? 0, [stockMap, store])
@@ -72,6 +80,9 @@ export default function Store({ boot }) {
         toast('No connection — saved and will send when you are back online')
       }
       setLines([]); setReceiver(''); refresh(); flush()
+      if (mode === 'disburse' && toDept) {
+        loadDepartmentHistory(staff.branch_id, toDept).then(setHistory).catch(() => {})
+      }
     } catch (e) { toast('Not saved: ' + e.message, 'error') }
     setBusy(false)
   }
@@ -140,6 +151,40 @@ export default function Store({ boot }) {
         className="mt-4 w-full h-14 rounded-2xl border-2 border-amber text-amber text-lg font-bold">
         {mode === 'receive' ? '+ Receive Stock' : '+ Issue To'}
       </button>
+
+      {mode === 'disburse' && toDept && (
+        <div className="mt-4">
+          <button onClick={() => setShowHistory(s => !s)}
+            className="w-full flex items-center justify-between text-left py-2">
+            <span className="font-semibold">
+              History — {departments.find(d => d.id === toDept)?.name}
+            </span>
+            <span className="text-dim text-sm">{showHistory ? 'Hide' : 'Show'}</span>
+          </button>
+          {showHistory && (
+            <ul className="divide-y divide-line/60 rounded-2xl border border-line bg-surface px-4 mb-2">
+              {(history || []).map((h, i) => (
+                <li key={i} className="py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex-1 min-w-0 truncate font-semibold">
+                      {h.stock_items?.name || '—'}
+                    </span>
+                    <span className="tnum text-dim text-sm">{h.business_date}</span>
+                  </div>
+                  <div className="text-dim text-sm mt-0.5">
+                    {h.qty} received{h.received_by ? ` by ${h.received_by}` : ''}
+                    {h.staff?.full_name ? ` · issued by ${h.staff.full_name}` : ''}
+                  </div>
+                </li>
+              ))}
+              {history === null && <li className="py-6 text-dim text-center">Loading…</li>}
+              {history && !history.length && (
+                <li className="py-6 text-dim text-center">Nothing issued to this department yet.</li>
+              )}
+            </ul>
+          )}
+        </div>
+      )}
 
       <ul className="mt-4 divide-y divide-line/60">
         {lines.map(l => {

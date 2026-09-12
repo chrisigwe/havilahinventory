@@ -407,3 +407,15 @@ the counts in its error. The confirmation dialog offers "Deactivate
 instead" right there for that common case — it hides the customer from
 future credit sales without touching their history, reusing the
 existing `customers.is_active` flag.
+
+
+## Issue history per department
+
+Under "+ Issue To" on the Store screen (Issue/OUT mode), a collapsible
+"History — <Department>" section shows everything issued to whichever
+department is currently selected: item, quantity, date, who received
+it, and who issued it. Switching the department chip switches the
+history shown — it follows whichever department you've selected, same
+as the item picker and receiver field do. Covers the last 60 days.
+No database changes — reads the same `stock_movements` rows already
+written by every issue.

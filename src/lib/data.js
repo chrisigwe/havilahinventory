@@ -595,3 +595,20 @@ export async function deactivateCustomer(customerId) {
     .update({ is_active: false }).eq('id', customerId)
   if (error) throw error
 }
+
+// what a department has received from the store — transfers and
+// issues, newest first. Used on the Store screen's history section.
+export async function loadDepartmentHistory(branchId, locationId, days = 60) {
+  const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10)
+  const { data, error } = await supabase.from('stock_movements')
+    .select(`business_date, qty, received_by, movement_type, created_at,
+             stock_items(name), staff:recorded_by(full_name)`)
+    .eq('branch_id', branchId).eq('to_location', locationId)
+    .in('movement_type', ['transfer', 'issue'])
+    .gte('business_date', since)
+    .order('business_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(150)
+  if (error) throw error
+  return data
+}
