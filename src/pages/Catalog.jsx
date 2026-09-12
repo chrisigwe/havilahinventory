@@ -21,10 +21,13 @@ export default function Catalog({ boot, onChanged }) {
     if (!all) return []
     const n = q.trim().toLowerCase()
     return all
-      .filter(i => show === 'all' || (show === 'active') === i.is_active)
+      .filter(i => i && typeof i.name === 'string')   // never let one bad row blank the screen
+      .filter(i => show === 'all' || (show === 'active') === !!i.is_active)
       .filter(i => !n || i.name.toLowerCase().includes(n))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [all, q, show])
+
+  const brokenCount = (all || []).filter(i => !i || typeof i.name !== 'string').length
 
   async function save() {
     setBusy(true)
@@ -99,12 +102,18 @@ export default function Catalog({ boot, onChanged }) {
               {i.cost_price != null && (
                 <span className="text-dim text-sm tnum">cost {naira(i.cost_price)}</span>
               )}
-              <span className="tnum">{naira(i.selling_price)}</span>
+              <span className="tnum">{naira(i.selling_price ?? 0)}</span>
             </button>
           </li>
         ))}
         {!list.length && <li className="py-8 text-center text-dim">Nothing matches.</li>}
       </ul>
+      {brokenCount > 0 && (
+        <p className="mt-3 text-clay text-sm">
+          {brokenCount} item{brokenCount > 1 ? 's' : ''} could not be displayed — bad data
+          in the catalog. Tell your developer rather than ignore this.
+        </p>
+      )}
 
       {(edit || adding) && (
         <div className="fixed inset-0 z-50 bg-bg flex flex-col">
