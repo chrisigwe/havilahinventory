@@ -339,3 +339,26 @@ the earlier rounds missed:
   permit an out-of-bounds post — left as two constants rather than
   adding a settings lookup for one cosmetic value, but worth knowing
   if that limit is ever changed.
+
+
+## On-behalf-of is now location-scoped
+
+The "recording on behalf of" list on the Sales screen now shows only
+staff assigned to the currently-selected location — Open Bar shows its
+own people, MainBar its own, Minimart its own — instead of every bar
+hand at the branch. It also includes front desk staff, who record
+Minimart sales (see below). Switching locations reloads the list and
+drops a stale selection if that person doesn't work the new location.
+
+Front desk staff can now record sales here (39_front_desk_minimart.sql)
+— same rights as bar staff: record for their assigned location, edit
+their own entries today/yesterday, never delete. This is new capability
+inside the inventory app only; nothing about their innflow access changes.
+
+**One thing to decide, not assumed:** the two existing Front Desk
+accounts are shared logins (one per branch, from the original
+migration). Daniel/Mercy and Princess/Chidimma could share those, or
+each get an individual login — the file includes both paths. Individual
+logins match how every other credit/sales attribution in this app
+works (`recorded_by`, `credit_staff_id`), so that's the recommended one
+unless there's a reason to keep it shared.

@@ -3,7 +3,7 @@ import { naira, lagosToday, tierLabel, methodLabel } from '../lib/format'
 import { loadStockMap, loadPopular, loadToday, saveBasket, saveWriteoff,
          loadDailySummary, loadCustomers, createCustomer,
          loadReconciliation, loadOpeningDate, loadBalances, loadReceipt,
-         loadBarStaff } from '../lib/data'
+         loadStaffForLocation } from '../lib/data'
 import { enqueue, flush, isConnectionError } from '../lib/outbox'
 import { useToast } from '../components/Toast'
 import ItemPicker from '../components/ItemPicker'
@@ -72,9 +72,18 @@ export default function SalesEntry({ boot }) {
     loadDailySummary(staff.branch_id, date, locationId).then(setSummary).catch(() => {})
     loadReconciliation(staff.branch_id, date, locationId).then(setRecon).catch(() => {})
     loadOpeningDate(staff.branch_id).then(setOpeningDate).catch(() => {})
-    if (canOverrideVariance && !people.length) {
-      loadBarStaff(staff.branch_id).then(ps => setPeople(ps.filter(p => p.role === 'bar')))
+
+    if (canOverrideVariance) {
+      loadStaffForLocation(staff.branch_id, locationId).then(ps => {
+        setPeople(ps)
+        // a person selected while looking at the previous bar may not
+        // work this one — drop the selection rather than leave it stale
+        setOnBehalfOf(cur => ps.some(p => p.id === cur) ? cur : null)
+      })
+    } else {
+      setPeople([])
     }
+
     const wantsBalances = methods.includes('credit')
     Promise.all([
       loadCustomers(staff.branch_id),
@@ -284,7 +293,7 @@ export default function SalesEntry({ boot }) {
 
       {canOverrideVariance && people.length > 0 && (
         <div className="mt-3">
-          <div className="text-dim text-sm mb-2">Recording on behalf of</div>
+          <div className="text-dim text-sm mb-2">Recording on behalf of (staff at this location)</div>
           <select value={onBehalfOf || ''} onChange={e => setOnBehalfOf(e.target.value || null)}
             className="h-12 w-full px-3 rounded-xl bg-surface border border-line">
             <option value="">Myself</option>

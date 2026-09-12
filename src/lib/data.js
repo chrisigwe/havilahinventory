@@ -548,6 +548,23 @@ export async function loadReceiptsForDate(branchId, date) {
 
 
 // people who record sales at this branch, for the manager's filter
+// Staff who work a specific location — for "recording on behalf of".
+// A person with NO staff_locations rows sees every department (same
+// rule the app uses everywhere else), so they show up regardless of
+// which location is passed in; someone assigned elsewhere does not.
+export async function loadStaffForLocation(branchId, locationId) {
+  const { data, error } = await supabase.from('staff')
+    .select(`id, full_name, role, staff_locations(location_id)`)
+    .eq('branch_id', branchId).eq('is_active', true)
+    .in('role', ['bar', 'front_desk'])
+    .order('full_name')
+  if (error) return []
+  return data
+    .filter(s => !locationId || !s.staff_locations.length
+                 || s.staff_locations.some(l => l.location_id === locationId))
+    .map(({ staff_locations, ...s }) => s)
+}
+
 export async function loadBarStaff(branchId) {
   const { data, error } = await supabase.from('staff')
     .select('id, full_name, role').eq('branch_id', branchId).eq('is_active', true)
