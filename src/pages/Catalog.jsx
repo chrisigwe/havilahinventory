@@ -17,6 +17,16 @@ export default function Catalog({ boot, onChanged }) {
   const refreshAll = () => loadAllCatalogItems(staff.branch_id).then(setAll).catch(() => setAll([]))
   useEffect(refreshAll, [staff.branch_id])
 
+  // switching branches (GM/admin) re-renders this component with new
+  // data rather than remounting it — clear anything referencing the
+  // OLD branch's items so a stale id can never be acted on after the
+  // switch (an open edit sheet, a pending delete confirmation, a
+  // half-typed "add new item" form)
+  useEffect(() => {
+    setAll(null)
+    setEdit(null); setAdding(null); setConfirmDel(null)
+  }, [staff.branch_id])
+
   const list = useMemo(() => {
     if (!all) return []
     const n = q.trim().toLowerCase()

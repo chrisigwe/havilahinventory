@@ -17,6 +17,7 @@ import { saveBasket, saveWriteoff, saveMovements, loadBranches,
 import Credit from './pages/Credit'
 import Counts from './pages/Counts'
 import Shell from './components/Shell'
+import ErrorBoundary from './components/ErrorBoundary'
 
 export default function App() {
   const [session, setSession] = useState(undefined) // undefined = loading
@@ -76,6 +77,7 @@ export default function App() {
   )
 
   return (
+    <ErrorBoundary>
     <ToastHost>
     <Shell staff={boot.staff} tab={tab} onTab={setTab}
       branches={boot.seesAllBranches ? branches : []}
@@ -92,6 +94,7 @@ export default function App() {
         : <Stock boot={boot} />}
     </Shell>
     </ToastHost>
+    </ErrorBoundary>
   )
 }
 

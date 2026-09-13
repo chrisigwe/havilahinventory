@@ -449,3 +449,29 @@ a single feature:
 - Added `MIGRATIONS.md` — with 47 files and several explicitly
   superseding earlier ones, there was no single answer to "which
   files do I actually run if I ever rebuild this." Now there is.
+
+
+## Crash reported: "TypeError: n is not a function" while switching branches on Catalog
+
+Root cause not conclusively identified from a minified stack trace
+alone (no sourcemap in production, and the trace pointed into React's
+internal scheduler rather than app code directly) — but two real gaps
+were closed regardless of the exact cause:
+
+- **No crash safety net existed anywhere.** Any unhandled error in any
+  screen unmounted the whole app to a blank white screen with nothing
+  but a console log — exactly what was reported. Added
+  `ErrorBoundary` wrapping the whole app: a crash now shows a plain
+  "Something went wrong — Reload" message instead of nothing.
+- **Catalog didn't reset its own state on a branch switch.** Since the
+  GM/admin branch selector re-renders the current screen with new data
+  rather than remounting it, an open edit sheet, a delete confirmation,
+  or a half-filled "add item" form could keep referencing the
+  *previous* branch's item after switching. Catalog now explicitly
+  clears all of that the moment `staff.branch_id` changes, so switching
+  branches can never leave stale state behind to act on incorrectly.
+
+If this recurs, the browser console's full stack trace (all frames,
+via "Copy stack trace" in DevTools) would let it be pinned down
+precisely — the pasted trace here was already truncated to minified
+function names with no line mapping.
