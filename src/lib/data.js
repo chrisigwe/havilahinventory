@@ -136,27 +136,6 @@ export async function saveBasket({ staff, locationId, lines, payments, date, cus
   return receipt
 }
 
-export async function saveSale({ staff, item, locationId, tier, qty, unitPrice, payments, date, customerId }) {
-  const { data: sale, error } = await supabase.from('sales').insert({
-    branch_id: staff.branch_id,
-    business_date: date,
-    occurred_at: new Date().toISOString(),
-    stock_item_id: item.id,
-    location_id: locationId,
-    tier, qty, unit_price: unitPrice,
-    customer_id: customerId || null,
-    recorded_by: staff.id,
-  }).select('id').single()
-  if (error) throw error
-  const rows = payments.filter(p => p.amount > 0)
-    .map(p => ({ sale_id: sale.id, method: p.method, amount: p.amount }))
-  if (rows.length) {
-    const { error: e2 } = await supabase.from('sale_payments').insert(rows)
-    if (e2) throw e2
-  }
-  return sale.id
-}
-
 export async function saveWriteoff({ staff, item, locationId, kind, qty, unitValue, note, date }) {
   const { error } = await supabase.from('stock_movements').insert({
     branch_id: staff.branch_id,
@@ -536,28 +515,6 @@ export async function loadReceipt(receiptId) {
   if (error) throw error
   return data
 }
-
-// today's baskets, newest first, for reprinting
-export async function loadReceiptsForDate(branchId, date) {
-  const { data, error } = await supabase.from('sales')
-    .select('receipt_id, business_date, qty, unit_price, created_at, customer_id, location_id, customers(name)')
-    .eq('branch_id', branchId).eq('business_date', date)
-    .not('receipt_id', 'is', null)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  const byReceipt = new Map()
-  for (const r of data) {
-    const cur = byReceipt.get(r.receipt_id) || {
-      receipt_id: r.receipt_id, created_at: r.created_at, lines: 0, total: 0,
-      customer: r.customers?.name || null, location_id: r.location_id,
-    }
-    cur.lines += 1
-    cur.total += Number(r.qty) * Number(r.unit_price)
-    byReceipt.set(r.receipt_id, cur)
-  }
-  return [...byReceipt.values()]
-}
-
 
 // people who record sales at this branch, for the manager's filter
 // Staff who work a specific location — for "recording on behalf of".

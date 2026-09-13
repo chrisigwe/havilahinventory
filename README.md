@@ -419,3 +419,33 @@ history shown — it follows whichever department you've selected, same
 as the item picker and receiver field do. Covers the last 60 days.
 No database changes — reads the same `stock_movements` rows already
 written by every issue.
+
+
+## Structural sweep (round 5)
+
+Cross-checked the entire app against every migration file rather than
+a single feature:
+
+- Every RPC the app calls (`submit_stock_count`, `post_opening_balance`,
+  `verify_stock_count`, `delete_stock_item`, `delete_customer`) is
+  defined exactly once, matching what's called.
+- Every view and helper function the app or RLS depends on exists,
+  and where one was redefined across rounds (e.g. `app_branch`,
+  `v_reconciliation`), the later version is a proper superset —
+  nothing that an earlier round relied on silently disappeared.
+- Every RLS policy that was ever dropped was recreated at least as
+  many times as it was dropped — no silent lockouts. Every table with
+  RLS enabled has a working read policy.
+- Every column the app writes to has a matching migration that
+  created it — no client code pointing at a column that was never
+  actually added.
+- Removed two dead functions: `saveSale` (replaced by `saveBasket`
+  when checkout became a basket, never deleted) and
+  `loadReceiptsForDate` (built for a receipt-listing feature that
+  ended up implemented a different way — tapping a row directly, or
+  "receipt for the last sale" — and was never wired in). Zero
+  behavior change; the build output was byte-identical, confirming
+  neither was ever actually reachable.
+- Added `MIGRATIONS.md` — with 47 files and several explicitly
+  superseding earlier ones, there was no single answer to "which
+  files do I actually run if I ever rebuild this." Now there is.
