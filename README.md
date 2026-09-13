@@ -475,3 +475,19 @@ If this recurs, the browser console's full stack trace (all frames,
 via "Copy stack trace" in DevTools) would let it be pinned down
 precisely — the pasted trace here was already truncated to minified
 function names with no line mapping.
+
+
+## Source maps enabled
+
+`vite.config.js` now builds with `sourcemap: true`. Without this, any
+production crash only ever showed minified names ("n is not a
+function", "at el", "at ns") with no way to trace them back to real
+source — which is why the branch-switch crash took multiple rounds to
+even attempt to localize. With the map file deployed alongside the JS
+bundle, the browser decodes a crash automatically: the same error will
+show the real file and line number directly in DevTools, no extra step
+needed to reproduce it.
+
+The map is public (served as a plain file next to the JS), which is a
+fine tradeoff here — there's nothing secret in the frontend source;
+every real permission boundary is enforced server-side by RLS.
