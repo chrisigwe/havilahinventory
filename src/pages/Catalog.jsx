@@ -14,7 +14,9 @@ export default function Catalog({ boot, onChanged }) {
   const [confirmDel, setConfirmDel] = useState(null)
   const [busy, setBusy] = useState(false)
 
-  const refreshAll = () => loadAllCatalogItems(staff.branch_id).then(setAll).catch(() => setAll([]))
+  const refreshAll = () => {
+    loadAllCatalogItems(staff.branch_id).then(setAll).catch(() => setAll([]))
+  }
   useEffect(refreshAll, [staff.branch_id])
 
   // switching branches (GM/admin) re-renders this component with new

@@ -491,3 +491,34 @@ needed to reproduce it.
 The map is public (served as a plain file next to the JS), which is a
 fine tradeoff here — there's nothing secret in the frontend source;
 every real permission boundary is enforced server-side by RLS.
+
+
+## The branch-switch crash: found and fixed
+
+Root cause: `Catalog.jsx`'s data-refresh function was written as a
+single-expression arrow with no braces —
+`() => loadAllCatalogItems(...).then(setAll).catch(...)` — passed
+directly as a `useEffect` callback. The value of that expression is a
+**Promise** (`.catch()` always returns one), and React treats
+whatever an effect returns as a cleanup function to invoke before the
+next run. Switching branches is exactly what triggers that: Catalog
+re-renders with a new `staff.branch_id`, React tries to run the
+previous effect's "cleanup" before starting the new one, and calling
+a Promise as if it were a function throws exactly the reported error.
+
+Every other screen's refresh function was already written as a
+braced block (implicitly returning `undefined`, which is what
+`useEffect` expects) — Catalog was the only exception in the entire
+app, which is exactly why it was the only screen that crashed. Fixed
+by wrapping it in braces to match every other page; swept the rest of
+the codebase for the same shape and found no other instances.
+
+Getting here took several rounds of stack traces that all turned out
+to be non-informative (minified names, then correctly-resolved but
+unhelpful React-internals frames) — the crash happens inside React's
+asynchronous effect scheduler, which is a context where the
+JavaScript call stack genuinely does not preserve the original
+calling code, no matter how good the source map is. The source maps
+enabled earlier are still a permanent, valuable improvement for any
+future crash that *does* originate in a normal render or event
+handler, where they'll work as intended immediately.
