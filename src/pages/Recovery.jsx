@@ -9,16 +9,29 @@ import { useToast } from '../components/Toast'
 const CAN_EDIT_REPAYMENT = ['auditor', 'admin', 'manager', 'gm']
 
 export default function Recovery({ boot }) {
-  const { staff, locations } = boot
+  const { staff, locations, allLocations } = boot
   const toast = useToast()
   const canEdit = CAN_EDIT_REPAYMENT.includes(staff.role)
   const [editing, setEditing] = useState(null)   // the row being edited
   const [draft, setDraft] = useState(null)
   const [busy, setBusy] = useState(false)
-  const salesPoints = (locations || []).filter(l => l.is_sales_point && !l.is_store)
+  // Oversight/audit roles must see EVERY department explicitly, not
+  // whatever locations happen to be on their own staff_locations row
+  // — matches Credit.jsx's identical fix. Bar/front_desk keep seeing
+  // only their own assigned departments.
+  const seesAllDepartments = ['storekeeper', 'manager', 'gm', 'admin', 'auditor'].includes(staff.role)
+  const salesPoints = (seesAllDepartments ? allLocations : locations || [])
+    .filter(l => l.is_sales_point && !l.is_store)
   const [locId, setLocId] = useState(staff.default_location_id || salesPoints[0]?.id || null)
   const [rows, setRows] = useState(null)
   const isReception = /reception/i.test(salesPoints.find(l => l.id === locId)?.name || '')
+  // Whether this person can see room-payment recovery at all — a
+  // role/assignment fact, not "which chip happens to be selected right
+  // now". loadRoomPayments is already branch-wide, not department-
+  // scoped; gating it on the currently-selected chip meant a
+  // front-desk person with Reception in their own location list could
+  // still miss it just by having a different chip selected.
+  const hasReceptionAccess = seesAllDepartments || (locations || []).some(l => /reception/i.test(l.name))
   const [roomPayments, setRoomPayments] = useState(null)
   const canDeleteRoomPayment = ['gm', 'admin'].includes(staff.role)
   const canDeleteRepayment = ['gm', 'admin'].includes(staff.role)
@@ -65,9 +78,9 @@ export default function Recovery({ boot }) {
   // repayments — a different table entirely, so a separate load
   // rather than folded into the one above.
   const refreshRoomPayments = useCallback(() => {
-    if (!isReception) return
+    if (!hasReceptionAccess) return
     loadRoomPayments(staff.branch_id).then(setRoomPayments).catch(() => setRoomPayments([]))
-  }, [staff.branch_id, isReception])
+  }, [staff.branch_id, hasReceptionAccess])
   useEffect(refreshRoomPayments, [refreshRoomPayments])
 
   function openEdit(r) {
@@ -128,7 +141,6 @@ export default function Recovery({ boot }) {
         </div>
       )}
 
-      {!isReception && (
       <>
       <div className="rounded-2xl border border-leaf bg-surface p-4 my-2">
         <div className="text-dim text-sm">Recovered in the last 60 days</div>
@@ -191,9 +203,8 @@ export default function Recovery({ boot }) {
 
       {!rows.length && <p className="py-8 text-center text-dim">No payments recorded yet.</p>}
       </>
-      )}
 
-      {isReception && (
+      {hasReceptionAccess && (
         <>
           <div className="rounded-2xl border border-leaf bg-surface p-4 my-2">
             <div className="text-dim text-sm">Recovered at Reception, last 60 days</div>

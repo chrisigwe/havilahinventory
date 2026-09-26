@@ -10,8 +10,14 @@ import { useToast } from '../components/Toast'
 // look at a day other than today without switching into the live
 // recording screen.
 export default function DailySales({ boot }) {
-  const { staff, locations, items } = boot
-  const salesPoints = (locations || []).filter(l => l.is_sales_point && !l.is_store)
+  const { staff, allLocations, items } = boot
+  // Every role that can reach this page (auditor, storekeeper,
+  // manager, gm, admin — see More.jsx) is here specifically to browse
+  // ANY department's history, not just their own assigned one, so
+  // this always uses allLocations rather than the staff member's own
+  // locations — unlike Credit/Recovery, there's no bar/front_desk
+  // access to this page that would need staying department-scoped.
+  const salesPoints = (allLocations || []).filter(l => l.is_sales_point && !l.is_store)
   const toast = useToast()
 
   const [date, setDate] = useState(lagosToday())
@@ -34,6 +40,13 @@ export default function DailySales({ boot }) {
   const visibleRoomRateProgress = (receptionDashboard?.roomRateProgress || [])
     .filter(r => isGmOrAdmin || r.room_number !== '209')
   const visibleRoomRateRemainingTotal = visibleRoomRateProgress.reduce((s, r) => s + r.remaining, 0)
+
+  // Reset to "All departments" on branch switch (GM/admin) — otherwise
+  // the old branch's department id stays selected, matching no chip
+  // here, so filtering silently breaks until a manual tap.
+  useEffect(() => {
+    setLocId('all')
+  }, [staff.branch_id])
   const currentDept = salesPoints.find(l => l.id === locId)
   const roomChargeCategory = isReception ? null
     : isRestaurant ? 'food'

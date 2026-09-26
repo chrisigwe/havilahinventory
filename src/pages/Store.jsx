@@ -36,6 +36,17 @@ export default function Store({ boot }) {
   const [convertTo, setConvertTo] = useState(null)       // { item, qty }
   const [convertPicking, setConvertPicking] = useState(null) // 'from' | 'to' | null
 
+  // Reset department pickers on branch switch (GM/admin) — otherwise
+  // the old branch's department ids stay selected here, matching no
+  // chip and pointing a transfer/conversion at a department that
+  // doesn't exist on the branch now being viewed.
+  useEffect(() => {
+    const valid = (id) => departments.some(d => d.id === id)
+    if (!valid(toDept)) setToDept(departments[0]?.id)
+    if (!valid(fromDept)) setFromDept(departments[1]?.id || departments[0]?.id)
+    if (!valid(convertLoc)) setConvertLoc(departments[0]?.id)
+  }, [staff.branch_id])
+
   const refresh = useCallback(() => {
     const since = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10)
     loadStockMap(staff.branch_id).then(setStockMap).catch(console.error)

@@ -35,6 +35,16 @@ export default function Credit({ boot }) {
   const seesAllDepartments = isEditor || staff.role === 'auditor'
   const salesPoints = (seesAllDepartments ? allLocations : locations || [])
     .filter(l => l.is_sales_point && !l.is_store)
+  // Whether this person can see guest-level, cross-department debt at
+  // all — a role/assignment fact, not "which chip happens to be
+  // selected right now". Guest balances (loadGuestBalances) already
+  // aggregate every department for a linked guest; gating it on the
+  // currently-selected chip instead of on actual Reception access
+  // meant a front-desk person with Reception in their own location
+  // list — Daniel, specifically — could still miss a guest's debt at
+  // a department like MainBar just by having a different chip
+  // selected when they looked.
+  const hasReceptionAccess = seesAllDepartments || (locations || []).some(l => /reception/i.test(l.name))
   const [locId, setLocId] = useState(staff.default_location_id || salesPoints[0]?.id || null)
   // Re-sync the selected department when the GM switches branch — the
   // old branch's location id matches no chip here, so without this
@@ -90,10 +100,10 @@ export default function Credit({ boot }) {
   // Reception's guest balances — a different data model entirely, so
   // a separate load rather than folded into the customer refresh above.
   const refreshGuestBalances = useCallback(() => {
-    if (!isReception) return
+    if (!hasReceptionAccess) return
     loadGuestBalances(staff.branch_id, isEditor ? staffFilter : null)
       .then(setGuestBalances).catch(() => setGuestBalances([]))
-  }, [staff.branch_id, isReception, isEditor, staffFilter])
+  }, [staff.branch_id, hasReceptionAccess, isEditor, staffFilter])
   useEffect(refreshGuestBalances, [refreshGuestBalances])
 
   // Load the department-scoped staff list once per department change,
@@ -251,7 +261,6 @@ export default function Credit({ boot }) {
         </div>
       )}
 
-      {!isReception && (
       <>
       <div className="flex items-baseline justify-between py-2">
         <h2 className="text-dim">
@@ -292,9 +301,8 @@ export default function Credit({ boot }) {
         {!owing.length && <li className="py-8 text-center text-dim">Nobody owes anything.</li>}
       </ul>
       </>
-      )}
 
-      {isReception && (() => {
+      {hasReceptionAccess && (() => {
         const gb = guestBalances || []
         const gbTotal = gb.reduce((s, r) => s + r.outstanding, 0)
         return (

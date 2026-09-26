@@ -13,9 +13,17 @@ import CustomerPicker from '../components/CustomerPicker'
 import Receipt from '../components/Receipt'
 
 export default function SalesEntry({ boot }) {
-  const { staff, locations, tiers, methods, items } = boot
+  const { staff, locations, allLocations, tiers, methods, items } = boot
   const toast = useToast()
-  const salesPoints = locations.filter(l => l.is_sales_point && !l.is_store)
+  // Manager/gm/admin reach this page via More's "Record a sale for
+  // any department" — that phrase is the actual product intent, so
+  // they need every department as an option, not just whatever their
+  // own staff_locations row happens to include (which may be none,
+  // since oversight roles aren't normally tied to one department).
+  // Bar/front_desk/storekeeper, who use this as their direct working
+  // tab, stay scoped to their own assigned department(s) as before.
+  const seesAllDepartments = ['manager', 'gm', 'admin'].includes(staff.role)
+  const salesPoints = (seesAllDepartments ? allLocations : locations).filter(l => l.is_sales_point && !l.is_store)
   // anyone who records a sale may date it; overriding an unbalanced
   // sale stays with the roles above bar staff
   const canBackdate = staff.role !== 'auditor'
